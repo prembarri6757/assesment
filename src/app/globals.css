@@ -5,66 +5,26 @@
 
 @layer base {
   :root {
-    /* Light Mode Primary: #2617CF */
-    --primary: 245 80% 45%;
-    --primary-foreground: 0 0% 100%;
-    
-    /* Light Mode Background: #F2F0F8 */
     --background: 255 30% 96%;
     --foreground: 222 47% 11%;
-    
-    /* Light Mode Accent: #28BBFF */
-    --accent: 199 100% 58%;
-    --accent-foreground: 0 0% 100%;
-
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    
+    --primary: 245 80% 45%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 255 20% 90%;
     --secondary-foreground: 245 80% 45%;
-    
     --muted: 255 20% 92%;
     --muted-foreground: 215 16% 47%;
-    
+    --accent: 199 100% 58%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    
     --border: 255 20% 88%;
     --input: 255 20% 88%;
     --ring: 245 80% 45%;
-    
     --radius: 0.75rem;
-  }
-
-  .dark {
-    /* Dark Mode Primary: #B4ACFF */
-    --primary: 246 100% 84%;
-    --primary-foreground: 222 47% 11%;
-    
-    /* Dark Mode Background: #0F172A */
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    
-    /* Dark Mode Accent: #7ED0FF */
-    --accent: 201 100% 75%;
-    --accent-foreground: 222 47% 11%;
-
-    --card: 217 33% 17%;
-    --card-foreground: 210 40% 98%;
-    --popover: 217 33% 17%;
-    --popover-foreground: 210 40% 98%;
-    
-    --secondary: 217 33% 25%;
-    --secondary-foreground: 246 100% 84%;
-    
-    --muted: 217 33% 20%;
-    --muted-foreground: 215 20% 65%;
-    
-    --border: 217 33% 25%;
-    --input: 217 33% 25%;
-    --ring: 246 100% 84%;
   }
 }
 
@@ -77,7 +37,6 @@
   }
 }
 
-/* Animations & Transitions */
 .reveal-up {
   opacity: 0;
   transform: translateY(20px);
@@ -94,15 +53,5 @@
 }
 
 .glass-card {
-  @apply bg-card/80 backdrop-blur-md border border-white/10 dark:border-white/5;
-}
-
-@keyframes pulse-red {
-  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-}
-
-.pulse-warning {
-  animation: pulse-red 2s infinite;
+  @apply bg-card/80 backdrop-blur-md border border-white/10;
 }
