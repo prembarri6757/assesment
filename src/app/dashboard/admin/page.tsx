@@ -294,23 +294,21 @@ export default function AdminDashboard() {
     if (!editingUser) return
 
     const userRef = doc(db, "users", editingUser.id)
-    const adminRoleRef = doc(db, "admin_roles", editingUser.id)
+    const adminMarkerRef = doc(db, "admin_roles", editingUser.id)
 
     try {
-      // Update User Profile
       await setDoc(userRef, {
         username: editingUser.username,
         role: editingUser.role
       }, { merge: true })
 
-      // Manage Admin Role Marker
       if (editingUser.role === 'admin') {
-        await setDoc(adminRoleRef, {
+        await setDoc(adminMarkerRef, {
           uid: editingUser.id,
           createdAt: serverTimestamp()
         }, { merge: true })
       } else {
-        await deleteDoc(adminRoleRef)
+        await deleteDoc(adminMarkerRef)
       }
 
       toast({ title: "User Updated", description: "The system roster has been synchronized." })
@@ -438,7 +436,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <Card className="border-none shadow-sm bg-primary/5">
+                <Card className="border-none shadow-sm bg-primary/5 reveal-up">
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Sparkles className="w-5 h-5 text-primary" /> Content Idea Lab
@@ -482,7 +480,7 @@ export default function AdminDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-none shadow-sm">
+                <Card className="border-none shadow-sm reveal-up">
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
                       <FileText className="w-5 h-5 text-primary" /> Published Assessments
@@ -491,18 +489,31 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-[300px]">
-                      <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-3">
                         {exams?.map((exam) => (
-                          <div key={exam.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border hover:border-primary/20 transition-colors">
-                            <div className="space-y-0.5">
+                          <div key={exam.id} className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border hover:border-primary/20 transition-all group">
+                            <div className="space-y-1">
                               <p className="text-sm font-bold">{exam.title}</p>
-                              <p className="text-[10px] text-muted-foreground uppercase tracking-widest">{exam.timeLimitMinutes}M • {exam.passingScore}% PASS</p>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">
+                                {exam.timeLimitMinutes}M • {exam.passingScore}% PASS SCORE
+                              </p>
                             </div>
-                            <Button variant="ghost" size="icon" onClick={() => setActiveTab('exams')}>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              type="button"
+                              onClick={() => setActiveTab('exams')}
+                              className="group-hover:translate-x-1 transition-transform"
+                            >
                               <ChevronRight className="w-4 h-4" />
                             </Button>
                           </div>
                         ))}
+                        {(!exams || exams.length === 0) && (
+                          <div className="text-center py-12 border border-dashed rounded-xl">
+                            <p className="text-xs text-muted-foreground">The assessment vault is currently empty.</p>
+                          </div>
+                        )}
                       </div>
                     </ScrollArea>
                   </CardContent>
@@ -519,20 +530,21 @@ export default function AdminDashboard() {
                    <Plus className="w-4 h-4" /> New Exam
                  </Button>
                </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {exams?.map((exam) => (
-                   <Card key={exam.id} className="group hover:border-primary transition-all overflow-hidden">
+                   <Card key={exam.id} className="reveal-up group hover:border-primary transition-all overflow-hidden flex flex-col">
                      <CardHeader>
                        <div className="flex justify-between items-start">
                          <div className="space-y-1">
                            <CardTitle className="text-lg">{exam.title}</CardTitle>
-                           <CardDescription className="line-clamp-2">{exam.description}</CardDescription>
+                           <CardDescription className="line-clamp-2 text-xs">{exam.description}</CardDescription>
                          </div>
                          <Badge variant="secondary" className="shrink-0">{exam.timeLimitMinutes}m</Badge>
                        </div>
                      </CardHeader>
-                     <CardContent className="flex items-center justify-between pt-0 bg-muted/20 py-4">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Pass Score: {exam.passingScore}%</span>
+                     <div className="flex-1" />
+                     <CardContent className="flex items-center justify-between pt-0 bg-muted/20 py-4 mt-4">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Pass: {exam.passingScore}%</span>
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -540,7 +552,7 @@ export default function AdminDashboard() {
                           className="text-destructive hover:bg-destructive/10 gap-2 h-8 px-3" 
                           onClick={() => setExamToDelete(exam.id)}
                         >
-                          <Trash2 className="w-4 h-4" /> Delete Assessment
+                          <Trash2 className="w-4 h-4" /> Delete
                         </Button>
                      </CardContent>
                    </Card>
@@ -553,7 +565,7 @@ export default function AdminDashboard() {
             <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                <div className="space-y-2">
                  <h2 className="text-3xl font-bold">Secure Builder</h2>
-                 <p className="text-muted-foreground">Authoring content with separated question and answer key storage.</p>
+                 <p className="text-muted-foreground">Separated logic: Questions stored publicly, keys stored in restricted vault.</p>
                </div>
 
                <Card className="border-none shadow-sm">
@@ -596,13 +608,13 @@ export default function AdminDashboard() {
                    </Button>
                  </div>
 
-                 <div className="space-y-4 pb-24">
+                 <div className="space-y-6 pb-24">
                    {examQuestions.map((q, idx) => (
-                     <Card key={q.id} className="border-l-4 border-l-primary animate-in zoom-in-95 duration-200 shadow-lg overflow-visible">
+                     <Card key={q.id} className="reveal-up border-l-4 border-l-primary shadow-lg overflow-visible">
                         <CardHeader className="flex flex-row items-center justify-between py-4 bg-muted/30">
                           <div className="flex items-center gap-3">
-                            <Badge variant="default">Question {idx + 1}</Badge>
-                            <Badge variant="outline" className="text-[10px] uppercase font-bold text-primary">Key Secured</Badge>
+                            <Badge variant="default">Q {idx + 1}</Badge>
+                            <Badge variant="outline" className="text-[10px] uppercase font-bold text-primary">Answer Key Secured</Badge>
                           </div>
                           <Button 
                             variant="ghost" 
@@ -616,9 +628,9 @@ export default function AdminDashboard() {
                         </CardHeader>
                         <CardContent className="space-y-6 pt-6">
                           <div className="space-y-2">
-                            <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Question Prompt</Label>
+                            <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">Prompt Text</Label>
                             <Input 
-                              placeholder="Enter the challenge text here..." 
+                              placeholder="Enter the question challenge..." 
                               value={q.questionText} 
                               onChange={e => updateQuestion(q.id, 'questionText', e.target.value)}
                               className="text-lg font-medium bg-background border-primary/20"
@@ -627,7 +639,7 @@ export default function AdminDashboard() {
 
                           <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                              <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Answer Key Configuration</Label>
+                              <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-black">Multiple Choice Options</Label>
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
@@ -651,7 +663,7 @@ export default function AdminDashboard() {
                                   className={cn(
                                     "flex items-center gap-3 p-3 rounded-lg border transition-all group relative",
                                     q.correctOptionIndex === oIdx 
-                                      ? "bg-emerald-500/5 border-emerald-500/50 ring-1 ring-emerald-500/20 shadow-sm" 
+                                      ? "bg-emerald-500/5 border-emerald-500/50 ring-1 ring-emerald-500/20" 
                                       : "bg-background border-border"
                                   )}
                                 >
@@ -708,11 +720,6 @@ export default function AdminDashboard() {
                </div>
 
                <div className="fixed bottom-8 right-8 z-50 flex items-center gap-4">
-                 {examQuestions.length > 0 && (
-                   <Badge variant="secondary" className="bg-card shadow-lg px-4 py-2 border-primary/20 animate-in slide-in-from-right-4">
-                     {examQuestions.length} Questions Drafted
-                   </Badge>
-                 )}
                  <Button type="button" className="px-10 py-6 text-lg btn-premium shadow-2xl" onClick={handleSaveExam}>
                    <Save className="w-4 h-4 mr-2" /> Finalize & Publish
                  </Button>
@@ -766,35 +773,39 @@ export default function AdminDashboard() {
                  </Dialog>
                </div>
 
-               <Card className="border-none shadow-sm">
+               <Card className="border-none shadow-sm reveal-up">
                  <CardHeader>
                    <CardTitle>System Roster</CardTitle>
-                   <CardDescription>Manage user identities, update profiles, and elevate administrative roles.</CardDescription>
+                   <CardDescription>Full audit of every identity in the system. Admins can update roles and profile information.</CardDescription>
                  </CardHeader>
                  <CardContent>
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Identity</TableHead>
+                          <TableHead>Username</TableHead>
                           <TableHead>Email</TableHead>
                           <TableHead>Role</TableHead>
+                          <TableHead>Identity ID</TableHead>
                           <TableHead className="text-right">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {allUsers?.map((u) => (
-                          <TableRow key={u.id}>
+                          <TableRow key={u.id} className="group">
                             <TableCell className="font-bold">{u.username}</TableCell>
-                            <TableCell>{u.email}</TableCell>
+                            <TableCell className="text-muted-foreground">{u.email}</TableCell>
                             <TableCell>
-                              <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>{u.role}</Badge>
+                              <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="uppercase text-[9px]">
+                                {u.role}
+                              </Badge>
                             </TableCell>
+                            <TableCell className="text-[10px] font-mono opacity-50">{u.id}</TableCell>
                             <TableCell className="text-right">
                                <Button 
                                 variant="ghost" 
                                 size="sm" 
                                 type="button"
-                                className="gap-2"
+                                className="gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
                                 onClick={() => setEditingUser(u)}
                               >
                                 <Edit2 className="w-3 h-3" /> Edit Profile
@@ -810,10 +821,10 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'audit' && (
-            <Card className="border-none shadow-sm">
+            <Card className="border-none shadow-sm reveal-up">
               <CardHeader>
                 <CardTitle>Audit & Integrity History</CardTitle>
-                <CardDescription>Global tracking of every assessment attempt.</CardDescription>
+                <CardDescription>Global tracking of every assessment attempt and its security status.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -854,7 +865,7 @@ export default function AdminDashboard() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit System Identity</DialogTitle>
-            <DialogDescription>Modify user credentials and administrative clearance markers.</DialogDescription>
+            <DialogDescription>Modify user profile and administrative clearance markers.</DialogDescription>
           </DialogHeader>
           {editingUser && (
             <form onSubmit={handleUpdateUser} className="space-y-4 pt-4">
@@ -866,7 +877,7 @@ export default function AdminDashboard() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Email (Read-only)</Label>
+                <Label>Email (Restricted)</Label>
                 <Input value={editingUser.email} readOnly className="bg-muted opacity-70 cursor-not-allowed" />
               </div>
               <div className="space-y-2">
@@ -897,7 +908,7 @@ export default function AdminDashboard() {
               <AlertTriangle className="w-5 h-5 text-destructive" /> Purge Assessment?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This action will permanently delete the assessment from the vault. Students will no longer be able to attempt this exam. This action cannot be undone.
+              This action will permanently delete the assessment from the vault. Students will no longer be able to attempt this exam.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
