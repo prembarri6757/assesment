@@ -21,8 +21,8 @@ import {
   ChevronRight,
   UserCog
 } from "lucide-react"
-import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs } from "firebase/firestore"
+import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
+import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup } from "firebase/firestore"
 import { generateQuestionIdeas, type GenerateQuestionIdeasOutput } from "@/ai/flows/admin-question-idea-generator"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -92,8 +92,6 @@ export default function AdminDashboard() {
   }, [db, user, adminRole])
   const { data: allUsers } = useCollection(usersQuery)
 
-  const students = allUsers?.filter(u => u.role === 'student') || []
-
   const handleLogout = async () => {
     await signOut(auth)
     router.push('/')
@@ -113,23 +111,25 @@ export default function AdminDashboard() {
   }
 
   const addQuestion = (q?: any) => {
-    setExamQuestions([...examQuestions, q || {
+    // Normalize data from AI generator (suggestedOptions -> options)
+    const formatted = {
       id: Math.random().toString(36).substr(2, 9),
-      questionText: "",
-      options: ["", "", "", ""],
-      correctOptionIndex: 0
-    }])
+      questionText: q?.questionText || "",
+      options: q?.suggestedOptions || q?.options || ["", "", "", ""],
+      correctOptionIndex: q?.correctOptionIndex || 0
+    }
+    setExamQuestions(prev => [...prev, formatted])
   }
 
   const removeQuestion = (id: string) => {
-    setExamQuestions(examQuestions.filter(q => q.id !== id))
+    setExamQuestions(prev => prev.filter(q => q.id !== id))
   }
 
   const updateQuestion = (id: string, field: string, value: any) => {
-    setExamQuestions(examQuestions.map(q => q.id === id ? { ...q, [field]: value } : q))
+    setExamQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q))
   }
 
-  const handleSaveExam = async () => {
+  const handleSaveExam = () => {
     if (!user) return
     if (!newExam.title || examQuestions.length === 0) {
       toast({ title: "Validation Error", description: "Exam must have a title and questions.", variant: "destructive" })
@@ -139,52 +139,84 @@ export default function AdminDashboard() {
     const examId = doc(collection(db, "exams")).id
     const examRef = doc(db, "exams", examId)
 
-    try {
-      // 1. Save Exam Metadata
-      await setDoc(examRef, {
-        ...newExam,
-        id: examId,
-        createdBy: user.uid,
-        createdAt: serverTimestamp()
+    // 1. Save Exam Metadata
+    setDoc(examRef, {
+      ...newExam,
+      id: examId,
+      createdBy: user.uid,
+      createdAt: serverTimestamp()
+    }).catch(e => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: examRef.path,
+        operation: 'create',
+        requestResourceData: newExam
+      }))
+    })
+
+    // 2. Save Questions and Answer Keys
+    examQuestions.forEach(q => {
+      const qId = q.id || doc(collection(db, `exams/${examId}/questions`)).id
+      const publicQRef = doc(db, `exams/${examId}/questions`, qId)
+      const privateARef = doc(db, `exams/${examId}/answers`, qId)
+
+      setDoc(publicQRef, {
+        id: qId,
+        examId,
+        questionText: q.questionText,
+        options: q.options
+      }).catch(e => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: publicQRef.path,
+          operation: 'create'
+        }))
       })
 
-      // 2. Save Questions and Answer Keys separately for security
-      for (const q of examQuestions) {
-        const qId = q.id || doc(collection(db, `exams/${examId}/questions`)).id
-        
-        // Public Question (Student viewable)
-        await setDoc(doc(db, `exams/${examId}/questions`, qId), {
-          id: qId,
-          examId,
-          questionText: q.questionText,
-          options: q.options
-        })
+      setDoc(privateARef, {
+        id: qId,
+        correctOptionIndex: q.correctOptionIndex
+      }).catch(e => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: privateARef.path,
+          operation: 'create'
+        }))
+      })
+    })
 
-        // Protected Answer (Admin only)
-        await setDoc(doc(db, `exams/${examId}/answers`, qId), {
-          id: qId,
-          correctOptionIndex: q.correctOptionIndex
-        })
-      }
-
-      toast({ title: "Success", description: "Assessment published to the secure vault." })
-      setIsGenerating(false)
-      setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70 })
-      setExamQuestions([])
-      setActiveTab("exams")
-    } catch (error: any) {
-      toast({ title: "Operation Failed", description: error.message, variant: "destructive" })
-    }
+    toast({ title: "Success", description: "Assessment published to the secure vault." })
+    setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70 })
+    setExamQuestions([])
+    setActiveTab("exams")
   }
 
-  const handlePromote = async (uid: string) => {
-    try {
-      await setDoc(doc(db, "admin_roles", uid), { uid, createdAt: serverTimestamp() })
-      await setDoc(doc(db, "users", uid), { role: 'admin' }, { merge: true })
-      toast({ title: "User Promoted", description: "Administrative privileges granted." })
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" })
-    }
+  const handlePromote = (uid: string) => {
+    const roleRef = doc(db, "admin_roles", uid)
+    const userRef = doc(db, "users", uid)
+
+    setDoc(roleRef, { uid, createdAt: serverTimestamp() }).catch(e => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: roleRef.path,
+        operation: 'create'
+      }))
+    })
+
+    setDoc(userRef, { role: 'admin' }, { merge: true }).catch(e => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: userRef.path,
+        operation: 'update'
+      }))
+    })
+
+    toast({ title: "User Promoted", description: "Administrative privileges granted." })
+  }
+
+  const handleDeleteExam = (id: string) => {
+    const examRef = doc(db, "exams", id)
+    deleteDoc(examRef).catch(e => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: examRef.path,
+        operation: 'delete'
+      }))
+    })
   }
 
   if (isUserLoading || adminRoleLoading) {
@@ -352,7 +384,7 @@ export default function AdminDashboard() {
                      </CardHeader>
                      <CardContent className="flex items-center justify-between pt-0">
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Pass: {exam.passingScore}%</span>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteDoc(doc(db, "exams", exam.id))}>
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteExam(exam.id)}>
                           Archive
                         </Button>
                      </CardContent>
