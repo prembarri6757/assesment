@@ -22,7 +22,8 @@ import {
   UserCog,
   UserPlus,
   CircleCheck,
-  X
+  X,
+  AlertTriangle
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup } from "firebase/firestore"
@@ -47,6 +48,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export default function AdminDashboard() {
   const containerRef = useScrollReveal()
@@ -61,6 +72,7 @@ export default function AdminDashboard() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [aiIdeas, setAiIdeas] = useState<GenerateQuestionIdeasOutput | null>(null)
   const [topic, setTopic] = useState("")
+  const [examToDelete, setExamToDelete] = useState<string | null>(null)
   
   // Provisioning State
   const [isProvisioning, setIsProvisioning] = useState(false)
@@ -162,6 +174,18 @@ export default function AdminDashboard() {
       }
       return q
     }))
+  }
+
+  const handleDeleteExam = async () => {
+    if (!examToDelete) return
+    try {
+      await deleteDoc(doc(db, "exams", examToDelete))
+      toast({ title: "Assessment Deleted", description: "The exam has been removed from the vault." })
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" })
+    } finally {
+      setExamToDelete(null)
+    }
   }
 
   const handleSaveExam = (e: React.MouseEvent) => {
@@ -439,26 +463,26 @@ export default function AdminDashboard() {
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                  {exams?.map((exam) => (
-                   <Card key={exam.id} className="group hover:border-primary transition-all">
+                   <Card key={exam.id} className="group hover:border-primary transition-all overflow-hidden">
                      <CardHeader>
                        <div className="flex justify-between items-start">
                          <div className="space-y-1">
-                           <CardTitle>{exam.title}</CardTitle>
+                           <CardTitle className="text-lg">{exam.title}</CardTitle>
                            <CardDescription className="line-clamp-2">{exam.description}</CardDescription>
                          </div>
-                         <Badge variant="secondary">{exam.timeLimitMinutes}m</Badge>
+                         <Badge variant="secondary" className="shrink-0">{exam.timeLimitMinutes}m</Badge>
                        </div>
                      </CardHeader>
-                     <CardContent className="flex items-center justify-between pt-0">
-                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Pass: {exam.passingScore}%</span>
+                     <CardContent className="flex items-center justify-between pt-0 bg-muted/20 py-4">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Pass Score: {exam.passingScore}%</span>
                         <Button 
                           variant="ghost" 
                           size="sm" 
                           type="button"
-                          className="text-destructive" 
-                          onClick={() => deleteDoc(doc(db, "exams", exam.id))}
+                          className="text-destructive hover:bg-destructive/10 gap-2 h-8 px-3" 
+                          onClick={() => setExamToDelete(exam.id)}
                         >
-                          Archive
+                          <Trash2 className="w-4 h-4" /> Delete Assessment
                         </Button>
                      </CardContent>
                    </Card>
@@ -548,7 +572,7 @@ export default function AdminDashboard() {
                               <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Answer Key Configuration</Label>
                               <Button 
                                 variant="ghost" 
-                                size="xs" 
+                                size="sm" 
                                 type="button"
                                 className="text-[10px] h-6 px-2 text-primary hover:text-primary underline"
                                 onClick={() => addOption(q.id)}
@@ -569,14 +593,20 @@ export default function AdminDashboard() {
                                   className={cn(
                                     "flex items-center gap-3 p-3 rounded-lg border transition-all group relative",
                                     q.correctOptionIndex === oIdx 
-                                      ? "bg-emerald-500/5 border-emerald-500/50 ring-1 ring-emerald-500/20" 
+                                      ? "bg-emerald-500/5 border-emerald-500/50 ring-1 ring-emerald-500/20 shadow-sm" 
                                       : "bg-background border-border"
                                   )}
                                 >
-                                  <div className="flex flex-col items-center gap-1 min-w-[60px]">
-                                    <RadioGroupItem value={oIdx.toString()} id={`q${idx}-o${oIdx}`} className="scale-110" />
-                                    <Label htmlFor={`q${idx}-o${oIdx}`} className="text-[9px] uppercase font-bold text-muted-foreground cursor-pointer">
-                                      {q.correctOptionIndex === oIdx ? "Correct" : "Choice"}
+                                  <div className="flex flex-col items-center gap-1 min-w-[70px]">
+                                    <RadioGroupItem value={oIdx.toString()} id={`q${idx}-o${oIdx}`} className="scale-125" />
+                                    <Label 
+                                      htmlFor={`q${idx}-o${oIdx}`} 
+                                      className={cn(
+                                        "text-[9px] uppercase font-black cursor-pointer",
+                                        q.correctOptionIndex === oIdx ? "text-emerald-600" : "text-muted-foreground"
+                                      )}
+                                    >
+                                      {q.correctOptionIndex === oIdx ? "CORRECT" : "CHOICE"}
                                     </Label>
                                   </div>
 
@@ -750,6 +780,25 @@ export default function AdminDashboard() {
           )}
         </main>
       </div>
+
+      <AlertDialog open={!!examToDelete} onOpenChange={(open) => !open && setExamToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" /> Purge Assessment?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will permanently delete the assessment from the vault. Students will no longer be able to attempt this exam. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteExam} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete Assessment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
