@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ShieldCheck, Lock, Mail } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAuth, useFirestore } from "@/firebase"
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth"
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore"
 
@@ -76,6 +76,31 @@ export function AuthForm() {
     }
   }
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast({
+        title: "Email Required",
+        description: "Please enter your email address first to receive a reset link.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email)
+      toast({
+        title: "Reset Email Sent",
+        description: "Check your inbox for instructions to reset your password.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      })
+    }
+  }
+
   return (
     <Card className="w-full max-w-md glass-card animate-in fade-in zoom-in duration-500">
       <CardHeader className="text-center space-y-1">
@@ -122,7 +147,20 @@ export function AuthForm() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              {!isSignUp && (
+                <Button 
+                  variant="link" 
+                  size="sm" 
+                  className="px-0 font-normal text-xs"
+                  onClick={handleForgotPassword}
+                  type="button"
+                >
+                  Forgot password?
+                </Button>
+              )}
+            </div>
             <div className="relative">
               <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
               <Input 
