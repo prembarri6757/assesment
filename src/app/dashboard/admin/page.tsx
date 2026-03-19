@@ -99,18 +99,19 @@ export default function AdminDashboard() {
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
 
-  // Auth Protection
-  useEffect(() => {
-    if (!isUserLoading && !user) {
-      router.push('/')
-    }
-  }, [user, isUserLoading, router])
-
+  // Role check
   const adminRoleRef = useMemoFirebase(() => {
     if (!user) return null
     return doc(db, "admin_roles", user.uid)
   }, [db, user])
   const { data: adminRole, isLoading: adminRoleLoading } = useDoc(adminRoleRef)
+
+  // Auth Protection - Stable routing
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/')
+    }
+  }, [user, isUserLoading, router])
 
   // System Data
   const examsQuery = useMemoFirebase(() => {
@@ -225,7 +226,7 @@ export default function AdminDashboard() {
     })
 
     examQuestions.forEach(q => {
-      const qId = q.id || doc(collection(db, `exams/${examId}/questions`)).id
+      const qId = doc(collection(db, `exams/${examId}/questions`)).id
       const publicQRef = doc(db, `exams/${examId}/questions`, qId)
       const privateARef = doc(db, `exams/${examId}/answers`, qId)
 
@@ -318,12 +319,12 @@ export default function AdminDashboard() {
     }
   }
 
-  if (isUserLoading && !user) {
+  if (isUserLoading || (adminRoleLoading && !adminRole)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium animate-pulse">Initial secure handshake...</p>
+          <p className="text-sm font-medium animate-pulse">Establishing secure link...</p>
         </div>
       </div>
     )
@@ -370,7 +371,7 @@ export default function AdminDashboard() {
               type="button"
               onClick={() => setActiveTab(item.id)}
               className={cn(
-                "w-full flex items-center gap-3 p-3 rounded-xl transition-all group",
+                "w-full flex items-center gap-3 p-3 rounded-xl transition-all group text-left",
                 activeTab === item.id 
                   ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
                   : "hover:bg-muted text-muted-foreground hover:text-foreground"
@@ -406,7 +407,7 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-4">
              <ModeToggle />
              <Badge variant="outline" className="text-[10px] uppercase tracking-widest bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-               {adminRoleLoading ? "Authenticating..." : "System Live"}
+               {adminRoleLoading ? "Syncing..." : "System Live"}
              </Badge>
           </div>
         </header>
@@ -610,7 +611,7 @@ export default function AdminDashboard() {
 
                  <div className="space-y-6 pb-24">
                    {examQuestions.map((q, idx) => (
-                     <Card key={q.id} className="reveal-up border-l-4 border-l-primary shadow-lg overflow-visible">
+                     <Card key={q.id} className="border-l-4 border-l-primary shadow-lg overflow-visible animate-in fade-in zoom-in-95 duration-200">
                         <CardHeader className="flex flex-row items-center justify-between py-4 bg-muted/30">
                           <div className="flex items-center gap-3">
                             <Badge variant="default">Q {idx + 1}</Badge>
