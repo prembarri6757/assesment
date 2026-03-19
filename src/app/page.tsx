@@ -3,9 +3,30 @@
 
 import { AuthForm } from "@/components/auth/AuthForm"
 import { useScrollReveal } from "@/hooks/use-scroll-reveal"
+import { useUser, useDoc, useFirestore, useAuth } from "@/firebase"
+import { doc } from "firebase/firestore"
+import { Button } from "@/components/ui/button"
+import { LogOut, LayoutDashboard, ShieldCheck } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { signOut } from "firebase/auth"
+import { useMemoFirebase } from "@/firebase"
 
 export default function Home() {
   const containerRef = useScrollReveal()
+  const router = useRouter()
+  const auth = useAuth()
+  const db = useFirestore()
+  const { user, isUserLoading } = useUser()
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!user) return null
+    return doc(db, "users", user.uid)
+  }, [db, user])
+  const { data: userProfile, isLoading: profileLoading } = useDoc(userDocRef)
+
+  const handleLogout = async () => {
+    await signOut(auth)
+  }
 
   return (
     <main ref={containerRef} className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-br from-background to-secondary/30">
@@ -24,7 +45,37 @@ export default function Home() {
           </p>
         </div>
 
-        <AuthForm />
+        {!isUserLoading && user ? (
+          <div className="glass-card p-8 rounded-2xl shadow-xl space-y-6 text-center animate-in fade-in zoom-in duration-500">
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              <ShieldCheck className="text-primary w-8 h-8" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold">
+                Welcome back, {profileLoading ? "..." : (userProfile?.username || "Scholar")}
+              </h2>
+              <p className="text-sm text-muted-foreground">You are currently authenticated.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-3">
+              <Button 
+                onClick={() => router.push(`/dashboard/${userProfile?.role || 'student'}`)}
+                className="w-full btn-premium py-6 flex items-center gap-2"
+              >
+                <LayoutDashboard className="w-5 h-5" /> Go to Dashboard
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleLogout}
+                className="w-full py-6 flex items-center gap-2"
+              >
+                <LogOut className="w-5 h-5" /> Sign Out
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <AuthForm />
+        )}
 
         <div className="grid grid-cols-2 gap-4 pt-8">
           <div className="p-4 bg-card rounded-xl border border-border/50 text-center">

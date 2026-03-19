@@ -1,10 +1,11 @@
+
 {
   "entities": {
     "User": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user within the Secure Assessment Gateway, distinguishing between administrators and students. Authentication details are managed by an external system (Supabase Auth).",
+      "description": "Represents a user within the Secure Assessment Gateway, distinguishing between administrators and students.",
       "properties": {
         "id": {
           "type": "string",
@@ -14,6 +15,10 @@
           "type": "string",
           "description": "The email address of the user, used for identification.",
           "format": "email"
+        },
+        "username": {
+          "type": "string",
+          "description": "The chosen display name or username of the user."
         },
         "role": {
           "type": "string",
@@ -60,7 +65,7 @@
         },
         "createdBy": {
           "type": "string",
-          "description": "Reference to the User (admin) who created this exam. (Relationship: User 1:N Exam)"
+          "description": "Reference to the User (admin) who created this exam."
         }
       },
       "required": [
@@ -75,7 +80,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Question",
       "type": "object",
-      "description": "Represents a single multiple-choice question belonging to an exam, including its text, options, and the correct answer.",
+      "description": "Represents a single multiple-choice question belonging to an exam.",
       "properties": {
         "id": {
           "type": "string",
@@ -83,7 +88,7 @@
         },
         "examId": {
           "type": "string",
-          "description": "Reference to the Exam this question belongs to. (Relationship: Exam 1:N Question)"
+          "description": "Reference to the Exam this question belongs to."
         },
         "questionText": {
           "type": "string",
@@ -98,7 +103,7 @@
         },
         "correctOptionIndex": {
           "type": "number",
-          "description": "The zero-based index indicating which option in the 'options' array is the correct answer."
+          "description": "The zero-based index of the correct answer."
         }
       },
       "required": [
@@ -113,7 +118,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Result",
       "type": "object",
-      "description": "Stores the outcome of a student's attempt at an exam, including their score, timestamps, and integrity status.",
+      "description": "Stores the outcome of a student's attempt at an exam.",
       "properties": {
         "id": {
           "type": "string",
@@ -121,15 +126,15 @@
         },
         "studentId": {
           "type": "string",
-          "description": "Reference to the User (student) who took the exam. (Relationship: User 1:N Result)"
+          "description": "Reference to the User (student) who took the exam."
         },
         "examId": {
           "type": "string",
-          "description": "Reference to the Exam that was attempted. (Relationship: Exam 1:N Result)"
+          "description": "Reference to the Exam that was attempted."
         },
         "score": {
           "type": "number",
-          "description": "The final score achieved by the student on the exam."
+          "description": "The final score achieved."
         },
         "startedAt": {
           "type": "string",
@@ -138,12 +143,12 @@
         },
         "completedAt": {
           "type": "string",
-          "description": "Timestamp indicating when the student completed or submitted the exam.",
+          "description": "Timestamp indicating when the student completed the exam.",
           "format": "date-time"
         },
         "integrityStatus": {
           "type": "string",
-          "description": "A status indicating any anti-cheat flags or suspicious activities detected during the exam (e.g., 'clean', 'flagged-tab-switch')."
+          "description": "A status indicating anti-cheat flags."
         }
       },
       "required": [
@@ -172,11 +177,11 @@
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Stores core profile information for each user (students), identified by their Supabase Auth UID. Admin roles are segregated into a separate collection for security.",
+          "description": "Stores core profile information for each user.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier (Supabase Auth UID) of the user."
+              "description": "The unique identifier of the user."
             }
           ]
         }
@@ -188,11 +193,11 @@
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "A marker collection for administrators. The existence of a document at this path signifies that the corresponding user (by UID) has admin privileges, enabling efficient, authorization-independent role checks without requiring a 'get()' call. Documents can be empty or contain minimal data like a timestamp.",
+          "description": "A marker collection for administrators.",
           "params": [
             {
               "name": "adminId",
-              "description": "The unique identifier (Supabase Auth UID) of the administrator."
+              "description": "The unique identifier of the administrator."
             }
           ]
         }
@@ -204,7 +209,7 @@
           "schema": {
             "$ref": "#/backend/entities/Exam"
           },
-          "description": "Contains definitions for multiple-choice examinations created by administrators. Includes the 'createdBy' field, which identifies the admin owner for authorization.",
+          "description": "Contains definitions for multiple-choice examinations.",
           "params": [
             {
               "name": "examId",
@@ -220,7 +225,7 @@
           "schema": {
             "$ref": "#/backend/entities/Question"
           },
-          "description": "Stores individual questions for an exam. Includes denormalized 'examCreatedBy' (copied from the parent Exam's 'createdBy' field) for authorization independence. The 'correctOptionIndex' field is for admin access only; students access sanitized questions via RPCs.",
+          "description": "Stores individual questions for an exam.",
           "params": [
             {
               "name": "examId",
@@ -240,11 +245,11 @@
           "schema": {
             "$ref": "#/backend/entities/Result"
           },
-          "description": "Stores the outcome and details of a student's attempt at an exam. This path ensures path-based ownership, allowing students to access only their own results. Admins can view all results via a collection group query.",
+          "description": "Stores the outcome and details of a student's attempt.",
           "params": [
             {
               "name": "studentId",
-              "description": "The unique identifier (Supabase Auth UID) of the student who took the exam."
+              "description": "The unique identifier of the student."
             },
             {
               "name": "resultId",
@@ -253,7 +258,6 @@
           ]
         }
       }
-    ],
-    "reasoning": "The Firestore structure for the Secure Assessment Gateway is designed with paramount focus on Authorization Independence, Structural Segregation, and Query As Protection (QAP) principles. This ensures robust security rules that are simple to write and debug, and prevents complex hierarchical dependencies.\n\n**Authorization Independence via Denormalization:**\n*   **User Roles (Admins):** Instead of checking a 'role' field on a user's document using `get()` (which breaks atomic operations), a dedicated top-level collection `/admin_roles/{adminId}` is used. The mere *existence* of a document at this path signifies an administrator. This allows for a `request.auth.uid in /admin_roles` check, which is a fast and independent authorization mechanism, fulfilling Authorization Independence.\n*   **Exam Ownership for Questions:** For questions (`/exams/{examId}/questions/{questionId}`), authorization to modify a question depends on who created the parent exam. To avoid a `get('/exams/{examId}')` call in the rules, the `createdBy` field from the parent `Exam` document is denormalized and copied into each `Question` document as `examCreatedBy`. This allows security rules on `questions` to directly verify admin ownership (`request.auth.uid == resource.data.examCreatedBy`) without cross-document reads, thus ensuring Authorization Independence.\n\n**Structural Segregation & QAPs:**\n*   **User Data:** Core user profiles are stored in `/users/{userId}`. This path-based ownership naturally segregates each user's data, making rules like `allow read, write: if request.auth.uid == userId;` straightforward and ensuring QAPs are met (a user can only list their own specific data by providing their UID).\n*   **Admin Roles:** The `/admin_roles/{adminId}` collection structurally segregates administrators from regular users, making admin checks (`isAdmin()`) explicit and performant via existence checks.\n*   **Exams:** The `/exams/{examId}` collection holds exam definitions. It is made universally readable for authenticated users (`allow list: if request.auth != null;`) to allow students to browse available exams, while write access is restricted to the `createdBy` admin. This supports QAPs by allowing efficient listing of exams without exposing unauthorized information.\n*   **Questions:** Questions are stored as a subcollection `/exams/{examId}/questions/{questionId}`. Crucially, the application requirements state, 'The client never receives correct answers or controls the authoritative clock.' This implies that `correctOptionIndex` should not be directly exposed to students via Firestore reads. Therefore, Firestore rules for this path are designed to primarily grant full read/write access *only* to the admin who created the exam (using the denormalized `examCreatedBy` field). Students will receive sanitized question data (without answers) through Supabase RPCs, which acts as a robust form of structural segregation for sensitive data.\n*   **Results:** Student exam results are stored under `/users/{studentId}/results/{resultId}`. This path-based ownership ensures that students can only read and write their *own* results. For administrators, a collection group query on `results` combined with an `isAdmin()` check allows listing all results, fulfilling QAPs for both students (private results) and admins (oversight)."
+    ]
   }
 }

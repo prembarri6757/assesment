@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -5,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { ShieldCheck, Lock, Mail } from "lucide-react"
+import { ShieldCheck, Lock, Mail, User as UserIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAuth, useFirestore } from "@/firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth"
@@ -16,6 +17,7 @@ export function AuthForm() {
   const [selectedRole, setSelectedRole] = useState<'student' | 'admin'>('student')
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [isSignUp, setIsSignUp] = useState(false)
   
@@ -30,13 +32,20 @@ export function AuthForm() {
     
     try {
       if (isSignUp) {
+        if (!username) {
+          toast({ title: "Validation Error", description: "Please enter a username.", variant: "destructive" })
+          setLoading(false)
+          return
+        }
+
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
 
-        // 1. Create the base user profile
+        // 1. Create the base user profile with username
         await setDoc(doc(db, "users", user.uid), {
           id: user.uid,
           email: user.email,
+          username: username,
           role: selectedRole,
           createdAt: serverTimestamp()
         })
@@ -49,19 +58,18 @@ export function AuthForm() {
           })
         }
 
-        toast({ title: "Account created", description: `Welcome, ${selectedRole}.` })
+        toast({ title: "Account created", description: `Welcome, ${username}.` })
         router.push(`/dashboard/${selectedRole}`)
       } else {
         const userCredential = await signInWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
 
-        // Fetch user document to find their actual role
+        // Fetch user document to find their actual role and username
         const userDoc = await getDoc(doc(db, "users", user.uid))
         if (userDoc.exists()) {
           const userData = userDoc.data()
           router.push(`/dashboard/${userData.role}`)
         } else {
-          // Fallback if no doc exists (shouldn't happen with correct sign-up)
           router.push(`/dashboard/${selectedRole}`)
         }
       }
@@ -131,6 +139,23 @@ export function AuthForm() {
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
+          {isSignUp && (
+            <div className="space-y-2">
+              <Label htmlFor="username">Username / Full Name</Label>
+              <div className="relative">
+                <UserIcon className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                <Input 
+                  id="username" 
+                  type="text" 
+                  placeholder="John Doe" 
+                  className="pl-10" 
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required 
+                />
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="email">Email Address</Label>
             <div className="relative">
