@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, LayoutDashboard, FileText, Users, ShieldAlert, Sparkles, Search, Trash2, Save, LogOut } from "lucide-react"
-import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
-import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, where, collectionGroup } from "firebase/firestore"
+import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
+import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup } from "firebase/firestore"
 import { generateQuestionIdeas, type GenerateQuestionIdeasOutput } from "@/ai/flows/admin-question-idea-generator"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -46,21 +46,28 @@ export default function AdminDashboard() {
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
 
-  // Firestore Queries - Memoized to prevent re-renders and wait for auth
-  const examsQuery = useMemoFirebase(() => {
+  // Step 1: Check if admin role document exists (crucial for security rules)
+  const adminRoleRef = useMemoFirebase(() => {
     if (!user) return null
-    return collection(db, "exams")
+    return doc(db, "admin_roles", user.uid)
   }, [db, user])
+  const { data: adminRole, isLoading: adminRoleLoading } = useDoc(adminRoleRef)
+
+  // Firestore Queries - Wait for auth AND verified admin role to prevent permission errors
+  const examsQuery = useMemoFirebase(() => {
+    if (!user || !adminRole) return null
+    return collection(db, "exams")
+  }, [db, user, adminRole])
   const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
 
   const resultsQuery = useMemoFirebase(() => {
-    if (!user) return null
-    // Collection Group query allows admins to see all results regardless of parent student path
+    if (!user || !adminRole) return null
+    // Collection Group query requires isAdmin() status verified by admin_roles document
     return query(collectionGroup(db, "results"))
-  }, [db, user])
+  }, [db, user, adminRole])
   const { data: results } = useCollection(resultsQuery)
 
-  // Fix: Move redirection to useEffect
+  // Redirection handling
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push('/')
@@ -141,8 +148,12 @@ export default function AdminDashboard() {
     }
   }
 
-  if (isUserLoading || !user) {
+  if (isUserLoading || adminRoleLoading) {
     return <div className="min-h-screen flex items-center justify-center">Verifying credentials...</div>
+  }
+
+  if (!user || !adminRole) {
+    return null // useEffect handles redirection
   }
 
   return (

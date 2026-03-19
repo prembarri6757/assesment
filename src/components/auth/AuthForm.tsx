@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { ShieldCheck, Lock, Mail } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/firebase"
+import { useAuth, useFirestore } from "@/firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
+import { doc, setDoc, serverTimestamp } from "firebase/firestore"
 
 export function AuthForm() {
   const [role, setRole] = useState<'student' | 'admin'>('student')
@@ -21,6 +22,7 @@ export function AuthForm() {
   
   const router = useRouter()
   const auth = useAuth()
+  const db = useFirestore()
   const { toast } = useToast()
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -29,7 +31,25 @@ export function AuthForm() {
     
     try {
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password)
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+        const user = userCredential.user
+
+        // 1. Create the base user profile in /users/{uid}
+        await setDoc(doc(db, "users", user.uid), {
+          id: user.uid,
+          email: user.email,
+          role: role,
+          createdAt: serverTimestamp()
+        })
+
+        // 2. If admin, create the special marker document in /admin_roles/{uid} for security rules
+        if (role === 'admin') {
+          await setDoc(doc(db, "admin_roles", user.uid), {
+            uid: user.uid,
+            createdAt: serverTimestamp()
+          })
+        }
+
         toast({ title: "Account created", description: "Welcome to the Secure Gateway." })
       } else {
         await signInWithEmailAndPassword(auth, email, password)
