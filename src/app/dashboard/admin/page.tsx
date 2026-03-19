@@ -84,14 +84,12 @@ export default function AdminDashboard() {
   const [topic, setTopic] = useState("")
   const [examToDelete, setExamToDelete] = useState<string | null>(null)
   
-  // Provisioning State
+  // User Management State
   const [isProvisioning, setIsProvisioning] = useState(false)
   const [newStudent, setNewStudent] = useState({ email: "", password: "", username: "", role: "student" as "student" | "admin" })
-
-  // User Management State
   const [editingUser, setEditingUser] = useState<any | null>(null)
 
-  // Exam State
+  // Exam Builder State
   const [newExam, setNewExam] = useState({
     title: "",
     description: "",
@@ -100,21 +98,21 @@ export default function AdminDashboard() {
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
 
-  // Role check - Critical for Dashboard access
+  // Administrative Role Verification
   const adminRoleRef = useMemoFirebase(() => {
     if (!user) return null
     return doc(db, "admin_roles", user.uid)
   }, [db, user])
   const { data: adminRole, isLoading: adminRoleLoading } = useDoc(adminRoleRef)
 
-  // Auth Protection - Stable routing
+  // Routing Protection
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push('/')
     }
   }, [user, isUserLoading, router])
 
-  // System Data - Stabilized queries by removing adminRole dependency to prevent flickers on sync
+  // System Data Queries - Stabilized by separating from role loading state
   const examsQuery = useMemoFirebase(() => {
     if (!user) return null
     return collection(db, "exams")
@@ -354,6 +352,7 @@ export default function AdminDashboard() {
 
   return (
     <div ref={containerRef} className="min-h-screen bg-background flex">
+      {/* Sidebar Navigation */}
       <aside className={cn(
         "bg-card border-r transition-all duration-300 ease-in-out hidden md:flex flex-col z-50",
         isSidebarOpen ? "w-64" : "w-20"
@@ -397,6 +396,7 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
+      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 border-b flex items-center justify-between px-6 bg-card/50 backdrop-blur-sm sticky top-0 z-40">
           <div className="flex items-center gap-4">
@@ -414,6 +414,7 @@ export default function AdminDashboard() {
         </header>
 
         <main className="flex-1 p-6 space-y-8 overflow-y-auto">
+          {/* Overview Tab */}
           {activeTab === 'overview' && (
             <div className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -535,6 +536,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {/* Assessment Vault Tab */}
           {activeTab === 'exams' && (
             <div className="space-y-6">
                <div className="flex items-center justify-between">
@@ -589,6 +591,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {/* Exam Builder Tab */}
           {activeTab === 'authoring' && (
             <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                <div className="space-y-2">
@@ -755,6 +758,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {/* User Management Tab */}
           {activeTab === 'students' && (
             <div className="space-y-8">
                <div className="flex items-center justify-between">
@@ -855,6 +859,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {/* Audit Logs Tab */}
           {activeTab === 'audit' && (
             <Card className="border-none shadow-sm reveal-up">
               <CardHeader>
@@ -908,6 +913,7 @@ export default function AdminDashboard() {
         </main>
       </div>
 
+      {/* Profile Edit Dialog */}
       <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
         <DialogContent>
           <DialogHeader>
@@ -948,6 +954,7 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
+      {/* Deletion Confirmation Alert */}
       <AlertDialog open={!!examToDelete} onOpenChange={(open) => !open && setExamToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
