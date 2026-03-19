@@ -19,7 +19,8 @@ import {
   History,
   Menu,
   ChevronRight,
-  UserCog
+  UserCog,
+  UserPlus
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup } from "firebase/firestore"
@@ -34,8 +35,16 @@ import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/firebase"
-import { signOut } from "firebase/auth"
+import { signOut, createUserWithEmailAndPassword } from "firebase/auth"
 import { cn } from "@/lib/utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 export default function AdminDashboard() {
   const containerRef = useScrollReveal()
@@ -51,6 +60,10 @@ export default function AdminDashboard() {
   const [aiIdeas, setAiIdeas] = useState<GenerateQuestionIdeasOutput | null>(null)
   const [topic, setTopic] = useState("")
   
+  // Provisioning State
+  const [isProvisioning, setIsProvisioning] = useState(false)
+  const [newStudent, setNewStudent] = useState({ email: "", password: "", username: "" })
+
   // Exam State
   const [newExam, setNewExam] = useState({
     title: "",
@@ -111,7 +124,6 @@ export default function AdminDashboard() {
   }
 
   const addQuestion = (q?: any) => {
-    // Normalize data from AI generator (suggestedOptions -> options)
     const formatted = {
       id: Math.random().toString(36).substr(2, 9),
       questionText: q?.questionText || "",
@@ -139,7 +151,6 @@ export default function AdminDashboard() {
     const examId = doc(collection(db, "exams")).id
     const examRef = doc(db, "exams", examId)
 
-    // 1. Save Exam Metadata
     setDoc(examRef, {
       ...newExam,
       id: examId,
@@ -153,7 +164,6 @@ export default function AdminDashboard() {
       }))
     })
 
-    // 2. Save Questions and Answer Keys
     examQuestions.forEach(q => {
       const qId = q.id || doc(collection(db, `exams/${examId}/questions`)).id
       const publicQRef = doc(db, `exams/${examId}/questions`, qId)
@@ -188,6 +198,30 @@ export default function AdminDashboard() {
     setActiveTab("exams")
   }
 
+  const handleProvisionStudent = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsProvisioning(true)
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, newStudent.email, newStudent.password)
+      const newUser = userCredential.user
+
+      await setDoc(doc(db, "users", newUser.uid), {
+        id: newUser.uid,
+        email: newUser.email,
+        username: newStudent.username,
+        role: 'student',
+        createdAt: serverTimestamp()
+      })
+
+      toast({ title: "Student Provisioned", description: `Account created for ${newStudent.username}.` })
+      setNewStudent({ email: "", password: "", username: "" })
+    } catch (error: any) {
+      toast({ title: "Provisioning Error", description: error.message, variant: "destructive" })
+    } finally {
+      setIsProvisioning(false)
+    }
+  }
+
   const handlePromote = (uid: string) => {
     const roleRef = doc(db, "admin_roles", uid)
     const userRef = doc(db, "users", uid)
@@ -207,16 +241,6 @@ export default function AdminDashboard() {
     })
 
     toast({ title: "User Promoted", description: "Administrative privileges granted." })
-  }
-
-  const handleDeleteExam = (id: string) => {
-    const examRef = doc(db, "exams", id)
-    deleteDoc(examRef).catch(e => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: examRef.path,
-        operation: 'delete'
-      }))
-    })
   }
 
   if (isUserLoading || adminRoleLoading) {
@@ -242,7 +266,6 @@ export default function AdminDashboard() {
 
   return (
     <div ref={containerRef} className="min-h-screen bg-background flex">
-      {/* Sidebar */}
       <aside className={cn(
         "bg-card border-r transition-all duration-300 ease-in-out hidden md:flex flex-col z-50",
         isSidebarOpen ? "w-64" : "w-20"
@@ -384,7 +407,7 @@ export default function AdminDashboard() {
                      </CardHeader>
                      <CardContent className="flex items-center justify-between pt-0">
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Pass: {exam.passingScore}%</span>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteExam(exam.id)}>
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteDoc(doc(db, "exams", exam.id))}>
                           Archive
                         </Button>
                      </CardContent>
@@ -410,7 +433,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="space-y-2">
                         <Label>Time Limit (Min)</Label>
-                        <Input type="number" value={newExam.timeLimitMinutes} onChange={e => setNewExam({...newExam, timeLimitMinutes: parseInt(e.target.value)})} />
+                        <Input type="number" value={newExam.timeLimitMinutes} onChange={e => setNewExam({...newExam, timeLimitMinutes: parseInt(e.target.value) || 0})} />
                       </div>
                       <div className="space-y-2 md:col-span-2">
                         <Label>Detailed Instructions</Label>
@@ -418,7 +441,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="space-y-2">
                         <Label>Passing Score (%)</Label>
-                        <Input type="number" value={newExam.passingScore} onChange={e => setNewExam({...newExam, passingScore: parseInt(e.target.value)})} />
+                        <Input type="number" value={newExam.passingScore} onChange={e => setNewExam({...newExam, passingScore: parseInt(e.target.value) || 0})} />
                       </div>
                     </div>
                  </CardContent>
@@ -427,7 +450,7 @@ export default function AdminDashboard() {
                <div className="space-y-4">
                  <div className="flex items-center justify-between">
                    <h3 className="text-xl font-bold">Question Blocks</h3>
-                   <Button variant="outline" size="sm" onClick={() => addQuestion()} className="gap-2">
+                   <Button variant="outline" size="sm" type="button" onClick={() => addQuestion()} className="gap-2">
                      <Plus className="w-4 h-4" /> Append Question
                    </Button>
                  </div>
@@ -437,7 +460,7 @@ export default function AdminDashboard() {
                      <Card key={q.id} className="reveal-up border-l-4 border-l-primary animate-in slide-in-from-left-4 duration-300">
                         <CardHeader className="flex flex-row items-center justify-between py-4">
                           <Badge variant="outline">Q{idx + 1}</Badge>
-                          <Button variant="ghost" size="sm" onClick={() => removeQuestion(q.id)} className="text-destructive h-8 w-8 p-0">
+                          <Button variant="ghost" size="sm" type="button" onClick={() => removeQuestion(q.id)} className="text-destructive h-8 w-8 p-0">
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </CardHeader>
@@ -487,6 +510,38 @@ export default function AdminDashboard() {
 
           {activeTab === 'students' && (
             <div className="space-y-8 animate-in fade-in duration-500">
+               <div className="flex items-center justify-between">
+                 <h2 className="text-2xl font-bold">User Management</h2>
+                 <Dialog>
+                   <DialogTrigger asChild>
+                     <Button className="gap-2"><UserPlus className="w-4 h-4" /> Provision Student</Button>
+                   </DialogTrigger>
+                   <DialogContent>
+                     <DialogHeader>
+                       <DialogTitle>Provision New Student</DialogTitle>
+                       <DialogDescription>Create a managed student identity for the secure gateway.</DialogDescription>
+                     </DialogHeader>
+                     <form onSubmit={handleProvisionStudent} className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                          <Label>Username</Label>
+                          <Input required value={newStudent.username} onChange={e => setNewStudent({...newStudent, username: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Email</Label>
+                          <Input required type="email" value={newStudent.email} onChange={e => setNewStudent({...newStudent, email: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Temporary Password</Label>
+                          <Input required type="password" value={newStudent.password} onChange={e => setNewStudent({...newStudent, password: e.target.value})} />
+                        </div>
+                        <Button type="submit" className="w-full" disabled={isProvisioning}>
+                          {isProvisioning ? "Provisioning..." : "Create Account"}
+                        </Button>
+                     </form>
+                   </DialogContent>
+                 </Dialog>
+               </div>
+
                <Card className="border-none shadow-sm">
                  <CardHeader>
                    <CardTitle>System Roster</CardTitle>
