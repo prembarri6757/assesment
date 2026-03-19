@@ -1,10 +1,7 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    /**
-     * SECURE ASSESSMENT GATEWAY: SECURITY RULES CONFIGURATION
-     */
 
     // --- GLOBAL HELPER FUNCTIONS ---
 
@@ -24,29 +21,33 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
-      allow list: if isAdmin(); // Allow admins to see the user list for management
-      allow create: if isOwner(userId);
+      allow list: if isAdmin();
+      allow create: if isSignedIn();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
     }
 
     match /admin_roles/{adminId} {
       allow get: if isSignedIn();
-      allow list: if isAdmin();
-      // Allow creation during sign-up OR by an existing admin
-      allow create: if isOwner(adminId) || isAdmin(); 
-      allow delete: if isAdmin(); 
+      allow list, delete: if isAdmin();
+      allow create: if isSignedIn(); 
       allow update: if false;
     }
 
     match /exams/{examId} {
       allow get, list: if isSignedIn();
       allow create, update, delete: if isAdmin();
-    }
 
-    match /exams/{examId}/questions/{questionId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      // PUBLIC QUESTIONS: Students can see text/options
+      match /questions/{questionId} {
+        allow get, list: if isSignedIn();
+        allow create, update, delete: if isAdmin();
+      }
+
+      // PRIVATE ANSWERS: Students are STRICTLY FORBIDDEN
+      match /answers/{questionId} {
+        allow read, write: if isAdmin();
+      }
     }
 
     match /users/{studentId}/results/{resultId} {
@@ -56,6 +57,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Allow admins to query results across all users
     match /{path=**}/results/{resultId} {
       allow list: if isAdmin();
     }

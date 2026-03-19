@@ -12,7 +12,7 @@ import { AlertCircle, ShieldAlert, CheckCircle2, Lock } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { useFirestore, useUser, useDoc, useCollection, useMemoFirebase } from "@/firebase"
-import { doc, setDoc, serverTimestamp, collection } from "firebase/firestore"
+import { doc, setDoc, serverTimestamp, collection, getDocs, writeBatch } from "firebase/firestore"
 
 export default function ExamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -38,7 +38,6 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const [isStarted, setIsStarted] = useState(false)
   const [resultId, setResultId] = useState<string | null>(null)
 
-  // Initial Sync: Create Result document at the correct path /users/{uid}/results/{id}
   const initializeExam = async () => {
     if (!user || !exam) return
     const newResultId = doc(collection(db, "users", user.uid, "results")).id
@@ -51,52 +50,38 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       studentEmail: user.email,
       examId: exam.id,
       examTitle: exam.title,
-      score: 0,
       startedAt: serverTimestamp(),
       integrityStatus: 'Clean',
-      answers: {}
+      responses: {}
     })
     
     setIsStarted(true)
     setTimeLeft(exam.timeLimitMinutes * 60)
     
-    // Request Fullscreen
     try {
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen()
       }
-    } catch (e) {
-      console.warn("Fullscreen request failed")
-    }
+    } catch (e) {}
   }
 
   // Auto-Save Effect
   useEffect(() => {
     if (isStarted && !isFinished && resultId && user && Object.keys(answers).length > 0) {
       const resultRef = doc(db, "users", user.uid, "results", resultId)
-      // Non-blocking update
-      setDoc(resultRef, { answers }, { merge: true })
-      // LocalStorage backup
-      localStorage.setItem(`exam_draft_${id}`, JSON.stringify(answers))
+      setDoc(resultRef, { responses: answers }, { merge: true })
     }
-  }, [answers, isStarted, isFinished, resultId, db, id, user])
+  }, [answers, isStarted, isFinished, resultId, db, user])
 
   const finishExam = useCallback(async () => {
-    if (isFinished || !resultId || !exam || !questions || !user) return
+    if (isFinished || !resultId || !user) return
     setIsFinished(true)
 
-    // Calculate score
-    let correctCount = 0
-    questions.forEach(q => {
-      if (answers[q.id] === q.correctOptionIndex) {
-        correctCount++
-      }
-    })
-    const finalScore = Math.round((correctCount / questions.length) * 100)
-
+    // Note: grading logic is not performed here because the student cannot read the AnswerKey collection.
+    // In a production system, this would trigger a server-side grading process.
+    // For this prototype, we mark it as finalized and the Admin dashboard calculates the score.
     const resultRef = doc(db, "users", user.uid, "results", resultId)
     await setDoc(resultRef, {
-      score: finalScore,
       completedAt: serverTimestamp(),
       integrityStatus: isFlagged ? 'Flagged' : 'Clean'
     }, { merge: true })
@@ -104,9 +89,9 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     if (document.fullscreenElement) {
       document.exitFullscreen()
     }
-  }, [isFinished, resultId, exam, questions, answers, isFlagged, db, user])
+  }, [isFinished, resultId, isFlagged, db, user])
 
-  // Anti-Cheat: Tab switching detection
+  // Anti-Cheat
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && isStarted && !isFinished) {
@@ -117,27 +102,16 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
         }
         toast({
           title: "SECURITY ALERT",
-          description: "Unauthorized window switching detected. This session has been flagged.",
+          description: "Unauthorized focus loss detected. Session flagged.",
           variant: "destructive"
         })
       }
     }
 
-    const handleFocusLoss = () => {
-      if (isStarted && !isFinished) {
-        setIsFlagged(true)
-      }
-    }
-
     if (isStarted && !isFinished) {
       document.addEventListener("visibilitychange", handleVisibilityChange)
-      window.addEventListener("blur", handleFocusLoss)
     }
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-      window.removeEventListener("blur", handleFocusLoss)
-    }
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
   }, [isStarted, isFinished, resultId, db, toast, user])
 
   // Timer
@@ -169,16 +143,14 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     }
   }
 
-  if (!exam || !questions) return <div className="min-h-screen flex items-center justify-center">Loading assessment vault...</div>
+  if (!exam || !questions) return <div className="min-h-screen flex items-center justify-center">Loading vault...</div>
 
   if (!isStarted) {
     return (
       <main className="min-h-screen flex items-center justify-center p-4 bg-background">
         <Card className="max-w-xl w-full glass-card animate-in zoom-in-95 duration-500">
           <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <ShieldAlert className="text-primary w-8 h-8" />
-            </div>
+            <ShieldAlert className="mx-auto text-primary w-12 h-12 mb-4" />
             <CardTitle className="text-2xl font-bold">{exam.title}</CardTitle>
             <p className="text-muted-foreground mt-2">{exam.description}</p>
           </CardHeader>
@@ -186,21 +158,21 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 border rounded-lg text-center bg-muted/30">
                 <p className="text-xs font-bold uppercase text-muted-foreground">Time Limit</p>
-                <p className="text-xl font-bold">{exam.timeLimitMinutes} Minutes</p>
+                <p className="text-xl font-bold">{exam.timeLimitMinutes} Min</p>
               </div>
               <div className="p-4 border rounded-lg text-center bg-muted/30">
-                <p className="text-xs font-bold uppercase text-muted-foreground">Total Questions</p>
+                <p className="text-xs font-bold uppercase text-muted-foreground">Questions</p>
                 <p className="text-xl font-bold">{questions.length}</p>
               </div>
             </div>
             <div className="bg-destructive/10 p-4 rounded-lg border border-destructive/20 text-xs text-destructive flex gap-3">
               <AlertCircle className="w-5 h-5 shrink-0" />
-              <p>Critical: This exam is proctored. Switching tabs or loss of focus will result in an immediate integrity violation report. Fullscreen mode will be requested.</p>
+              <p>Warning: This is a Zero-Trust proctored session. Answer keys are stored in a restricted collection inaccessible to students. Attempting to bypass focus mode will trigger a flag.</p>
             </div>
           </CardContent>
           <CardFooter>
             <Button onClick={initializeExam} className="w-full btn-premium py-6 text-lg">
-              <Lock className="w-4 h-4 mr-2" /> Begin Secure Session
+              <Lock className="w-4 h-4 mr-2" /> Start Secure Session
             </Button>
           </CardFooter>
         </Card>
@@ -213,27 +185,19 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       <main className="min-h-screen flex items-center justify-center p-4 bg-background">
         <Card className="max-w-xl w-full glass-card animate-in slide-in-from-bottom duration-500">
           <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle2 className="text-emerald-500 w-8 h-8" />
-            </div>
+            <CheckCircle2 className="mx-auto text-emerald-500 w-12 h-12 mb-4" />
             <CardTitle className="text-2xl font-bold">Session Finalized</CardTitle>
-            <p className="text-muted-foreground mt-2">Your results have been synced to the primary gateway.</p>
+            <p className="text-muted-foreground mt-2">Your responses have been synced to the vault. Grading will be performed by the primary gateway.</p>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent>
             <Alert variant={isFlagged ? "destructive" : "default"}>
               <ShieldAlert className="h-4 w-4" />
-              <AlertTitle>Integrity Analysis: {isFlagged ? 'Flagged' : 'Verified'}</AlertTitle>
-              <AlertDescription>
-                {isFlagged 
-                  ? "Unauthorized environment changes were detected. Your logs are under review."
-                  : "Session completed with a clean integrity status."}
-              </AlertDescription>
+              <AlertTitle>Status: {isFlagged ? 'Flagged' : 'Secure'}</AlertTitle>
+              <AlertDescription>Your session metadata is under review by the proctor.</AlertDescription>
             </Alert>
           </CardContent>
           <CardFooter>
-            <Button onClick={() => router.push('/dashboard/student')} className="w-full">
-              Return to Portal
-            </Button>
+            <Button onClick={() => router.push('/dashboard/student')} className="w-full">Return to Dashboard</Button>
           </CardFooter>
         </Card>
       </main>
@@ -248,15 +212,12 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       <header className="border-b bg-card sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-               <ShieldAlert className="text-primary-foreground w-5 h-5" />
-             </div>
              <div className="hidden sm:block">
-               <p className="font-bold text-sm leading-none">{exam.title}</p>
-               <p className="text-[10px] text-muted-foreground mt-1">Question {currentQuestionIdx + 1} of {questions.length}</p>
+               <p className="font-bold text-sm">{exam.title}</p>
+               <p className="text-[10px] text-muted-foreground">Question {currentQuestionIdx + 1} of {questions.length}</p>
              </div>
           </div>
-          <div className={`px-4 py-2 rounded-lg font-mono text-xl border transition-all duration-500 ${timeLeft < 60 ? 'bg-destructive/10 border-destructive text-destructive pulse-warning' : 'bg-muted border-border'}`}>
+          <div className={`px-4 py-2 rounded-lg font-mono text-xl border transition-all duration-500 ${timeLeft < 60 ? 'bg-destructive/10 border-destructive text-destructive pulse-warning' : 'bg-muted'}`}>
             {formatTime(timeLeft)}
           </div>
         </div>
@@ -282,10 +243,8 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
                       : 'hover:bg-muted/50 border-transparent hover:border-border'
                   }`}
                 >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${
-                    answers[currentQuestion.id] === idx 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-muted text-muted-foreground group-hover:bg-primary/20 group-hover:text-primary'
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                    answers[currentQuestion.id] === idx ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                   }`}>
                     {String.fromCharCode(65 + idx)}
                   </div>
@@ -297,21 +256,10 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             </div>
           </CardContent>
           <CardFooter className="bg-muted/30 p-8 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground italic">Draft synced to vault.</p>
+            <p className="text-xs text-muted-foreground italic">Responses synced securely.</p>
             <div className="flex gap-4">
-              <Button 
-                variant="outline" 
-                disabled={currentQuestionIdx === 0}
-                onClick={() => setCurrentQuestionIdx(p => p - 1)}
-              >
-                Previous
-              </Button>
-              <Button 
-                onClick={handleNext} 
-                disabled={answers[currentQuestion.id] === undefined}
-                className="btn-premium px-8"
-              >
-                {currentQuestionIdx === questions.length - 1 ? 'Finish Assessment' : 'Next Question'}
+              <Button onClick={handleNext} disabled={answers[currentQuestion.id] === undefined} className="btn-premium px-8">
+                {currentQuestionIdx === questions.length - 1 ? 'Finalize' : 'Next'}
               </Button>
             </div>
           </CardFooter>

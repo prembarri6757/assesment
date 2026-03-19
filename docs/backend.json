@@ -5,168 +5,77 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user within the Secure Assessment Gateway, distinguishing between administrators and students.",
+      "description": "Represents a user within the Secure Assessment Gateway.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the User entity."
-        },
-        "email": {
-          "type": "string",
-          "description": "The email address of the user, used for identification.",
-          "format": "email"
-        },
-        "username": {
-          "type": "string",
-          "description": "The chosen display name or username of the user."
-        },
-        "role": {
-          "type": "string",
-          "description": "The role of the user within the system (e.g., 'admin', 'student')."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp indicating when the user account was created.",
-          "format": "date-time"
-        }
+        "id": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "username": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "student"] },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "id",
-        "email",
-        "role",
-        "createdAt"
-      ]
+      "required": ["id", "email", "role", "createdAt"]
     },
     "Exam": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Exam",
       "type": "object",
-      "description": "Defines a multiple-choice examination, including its structure, time limits, and passing criteria.",
+      "description": "Defines a multiple-choice examination metadata.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Exam entity."
-        },
-        "title": {
-          "type": "string",
-          "description": "The title of the examination."
-        },
-        "description": {
-          "type": "string",
-          "description": "A brief description or instructions for the exam."
-        },
-        "timeLimitMinutes": {
-          "type": "number",
-          "description": "The maximum time allowed to complete the exam, in minutes."
-        },
-        "passingScore": {
-          "type": "number",
-          "description": "The minimum score required to pass this exam."
-        },
-        "createdBy": {
-          "type": "string",
-          "description": "Reference to the User (admin) who created this exam."
-        }
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "timeLimitMinutes": { "type": "number" },
+        "passingScore": { "type": "number" },
+        "createdBy": { "type": "string" }
       },
-      "required": [
-        "id",
-        "title",
-        "timeLimitMinutes",
-        "passingScore",
-        "createdBy"
-      ]
+      "required": ["id", "title", "timeLimitMinutes", "passingScore", "createdBy"]
     },
     "Question": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Question",
       "type": "object",
-      "description": "Represents a single multiple-choice question belonging to an exam.",
+      "description": "Public part of a question (text and options).",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Question entity."
-        },
-        "examId": {
-          "type": "string",
-          "description": "Reference to the Exam this question belongs to."
-        },
-        "questionText": {
-          "type": "string",
-          "description": "The main text of the multiple-choice question."
-        },
-        "options": {
-          "type": "array",
-          "description": "An ordered list of possible answer options for the question.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "correctOptionIndex": {
-          "type": "number",
-          "description": "The zero-based index of the correct answer."
-        }
+        "id": { "type": "string" },
+        "examId": { "type": "string" },
+        "questionText": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } }
       },
-      "required": [
-        "id",
-        "examId",
-        "questionText",
-        "options",
-        "correctOptionIndex"
-      ]
+      "required": ["id", "examId", "questionText", "options"]
+    },
+    "AnswerKey": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AnswerKey",
+      "type": "object",
+      "description": "Private part of a question (correct index). Admin only.",
+      "properties": {
+        "id": { "type": "string", "description": "Matches the Question ID" },
+        "correctOptionIndex": { "type": "number" }
+      },
+      "required": ["id", "correctOptionIndex"]
     },
     "Result": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Result",
       "type": "object",
-      "description": "Stores the outcome of a student's attempt at an exam.",
+      "description": "Stores student responses and calculated scores.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Result entity."
-        },
-        "studentId": {
-          "type": "string",
-          "description": "Reference to the User (student) who took the exam."
-        },
-        "examId": {
-          "type": "string",
-          "description": "Reference to the Exam that was attempted."
-        },
-        "score": {
-          "type": "number",
-          "description": "The final score achieved."
-        },
-        "startedAt": {
-          "type": "string",
-          "description": "Timestamp indicating when the student started the exam.",
-          "format": "date-time"
-        },
-        "completedAt": {
-          "type": "string",
-          "description": "Timestamp indicating when the student completed the exam.",
-          "format": "date-time"
-        },
-        "integrityStatus": {
-          "type": "string",
-          "description": "A status indicating anti-cheat flags."
-        }
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "examId": { "type": "string" },
+        "examTitle": { "type": "string" },
+        "score": { "type": "number" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "integrityStatus": { "type": "string" },
+        "responses": { "type": "object", "description": "Map of questionId to selected option index" }
       },
-      "required": [
-        "id",
-        "studentId",
-        "examId",
-        "score",
-        "startedAt",
-        "completedAt",
-        "integrityStatus"
-      ]
+      "required": ["id", "studentId", "examId", "startedAt", "integrityStatus"]
     }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous"
-    ]
+    "providers": ["password"]
   },
   "firestore": {
     "structure": [
@@ -174,88 +83,48 @@
         "path": "/users/{userId}",
         "definition": {
           "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Stores core profile information for each user.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user."
-            }
-          ]
+          "schema": { "$ref": "#/backend/entities/User" },
+          "description": "User profiles."
         }
       },
       {
         "path": "/admin_roles/{adminId}",
         "definition": {
           "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "A marker collection for administrators.",
-          "params": [
-            {
-              "name": "adminId",
-              "description": "The unique identifier of the administrator."
-            }
-          ]
+          "schema": { "$ref": "#/backend/entities/User" },
+          "description": "Admin marker documents."
         }
       },
       {
         "path": "/exams/{examId}",
         "definition": {
           "entityName": "Exam",
-          "schema": {
-            "$ref": "#/backend/entities/Exam"
-          },
-          "description": "Contains definitions for multiple-choice examinations.",
-          "params": [
-            {
-              "name": "examId",
-              "description": "The unique identifier for the exam."
-            }
-          ]
+          "schema": { "$ref": "#/backend/entities/Exam" },
+          "description": "Exam metadata."
         }
       },
       {
         "path": "/exams/{examId}/questions/{questionId}",
         "definition": {
           "entityName": "Question",
-          "schema": {
-            "$ref": "#/backend/entities/Question"
-          },
-          "description": "Stores individual questions for an exam.",
-          "params": [
-            {
-              "name": "examId",
-              "description": "The unique identifier of the parent exam."
-            },
-            {
-              "name": "questionId",
-              "description": "The unique identifier for the question."
-            }
-          ]
+          "schema": { "$ref": "#/backend/entities/Question" },
+          "description": "Public question content."
+        }
+      },
+      {
+        "path": "/exams/{examId}/answers/{questionId}",
+        "definition": {
+          "entityName": "AnswerKey",
+          "schema": { "$ref": "#/backend/entities/AnswerKey" },
+          "description": "Protected answer keys (Admin Only)."
         }
       },
       {
         "path": "/users/{studentId}/results/{resultId}",
         "definition": {
           "entityName": "Result",
-          "schema": {
-            "$ref": "#/backend/entities/Result"
-          },
-          "description": "Stores the outcome and details of a student's attempt.",
-          "params": [
-            {
-              "name": "studentId",
-              "description": "The unique identifier of the student."
-            },
-            {
-              "name": "resultId",
-              "description": "The unique identifier for the exam result."
-            }
-          ]
+          "schema": { "$ref": "#/backend/entities/Result" },
+          "description": "Student exam attempts."
         }
       }
     ]
