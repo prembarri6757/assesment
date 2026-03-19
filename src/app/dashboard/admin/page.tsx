@@ -20,7 +20,9 @@ import {
   Menu,
   ChevronRight,
   UserCog,
-  UserPlus
+  UserPlus,
+  CircleCheck,
+  X
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup } from "firebase/firestore"
@@ -64,7 +66,7 @@ export default function AdminDashboard() {
   const [isProvisioning, setIsProvisioning] = useState(false)
   const [newStudent, setNewStudent] = useState({ email: "", password: "", username: "" })
 
-  // Exam State (Persistent across renders)
+  // Exam State
   const [newExam, setNewExam] = useState({
     title: "",
     description: "",
@@ -140,6 +142,26 @@ export default function AdminDashboard() {
 
   const updateQuestion = (id: string, field: string, value: any) => {
     setExamQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q))
+  }
+
+  const addOption = (qId: string) => {
+    setExamQuestions(prev => prev.map(q => {
+      if (q.id === qId && q.options.length < 5) {
+        return { ...q, options: [...q.options, ""] }
+      }
+      return q
+    }))
+  }
+
+  const removeOption = (qId: string, oIdx: number) => {
+    setExamQuestions(prev => prev.map(q => {
+      if (q.id === qId && q.options.length > 2) {
+        const newOptions = q.options.filter((_: any, i: number) => i !== oIdx)
+        const newCorrectIndex = q.correctOptionIndex >= oIdx ? Math.max(0, q.correctOptionIndex - 1) : q.correctOptionIndex
+        return { ...q, options: newOptions, correctOptionIndex: newCorrectIndex }
+      }
+      return q
+    }))
   }
 
   const handleSaveExam = (e: React.MouseEvent) => {
@@ -245,7 +267,6 @@ export default function AdminDashboard() {
     toast({ title: "User Promoted", description: "Administrative privileges granted." })
   }
 
-  // Optimized loading check: only show full-screen loader if user isn't confirmed yet.
   if (isUserLoading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -493,47 +514,101 @@ export default function AdminDashboard() {
                    </Button>
                  </div>
 
-                 <div className="space-y-4">
+                 <div className="space-y-4 pb-24">
                    {examQuestions.map((q, idx) => (
-                     <Card key={q.id} className="border-l-4 border-l-primary animate-in zoom-in-95 duration-200">
-                        <CardHeader className="flex flex-row items-center justify-between py-4">
-                          <Badge variant="outline">Q{idx + 1}</Badge>
+                     <Card key={q.id} className="border-l-4 border-l-primary animate-in zoom-in-95 duration-200 shadow-lg overflow-visible">
+                        <CardHeader className="flex flex-row items-center justify-between py-4 bg-muted/30">
+                          <div className="flex items-center gap-3">
+                            <Badge variant="default">Question {idx + 1}</Badge>
+                            <Badge variant="outline" className="text-[10px] uppercase font-bold text-primary">Key Secured</Badge>
+                          </div>
                           <Button 
                             variant="ghost" 
                             size="sm" 
                             type="button" 
                             onClick={() => removeQuestion(q.id)} 
-                            className="text-destructive h-8 w-8 p-0"
+                            className="text-destructive h-8 w-8 p-0 hover:bg-destructive/10"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                          <Input 
-                            placeholder="Prompt..." 
-                            value={q.questionText} 
-                            onChange={e => updateQuestion(q.id, 'questionText', e.target.value)}
-                            className="text-lg font-medium"
-                          />
-                          <div className="space-y-3">
-                            <Label className="text-xs uppercase tracking-widest text-muted-foreground">Answer Configuration</Label>
+                        <CardContent className="space-y-6 pt-6">
+                          <div className="space-y-2">
+                            <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Question Prompt</Label>
+                            <Input 
+                              placeholder="Enter the challenge text here..." 
+                              value={q.questionText} 
+                              onChange={e => updateQuestion(q.id, 'questionText', e.target.value)}
+                              className="text-lg font-medium bg-background border-primary/20"
+                            />
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Answer Key Configuration</Label>
+                              <Button 
+                                variant="ghost" 
+                                size="xs" 
+                                type="button"
+                                className="text-[10px] h-6 px-2 text-primary hover:text-primary underline"
+                                onClick={() => addOption(q.id)}
+                                disabled={q.options.length >= 5}
+                              >
+                                + Add Choice
+                              </Button>
+                            </div>
+                            
                             <RadioGroup 
                               value={q.correctOptionIndex.toString()} 
                               onValueChange={v => updateQuestion(q.id, 'correctOptionIndex', parseInt(v))}
-                              className="space-y-2"
+                              className="grid grid-cols-1 gap-2"
                             >
                               {q.options.map((opt: string, oIdx: number) => (
-                                <div key={oIdx} className="flex items-center gap-3">
-                                  <RadioGroupItem value={oIdx.toString()} />
-                                  <Input 
-                                    placeholder={`Option ${oIdx + 1}`} 
-                                    value={opt} 
-                                    onChange={e => {
-                                      const opts = [...q.options]
-                                      opts[oIdx] = e.target.value
-                                      updateQuestion(q.id, 'options', opts)
-                                    }}
-                                  />
+                                <div 
+                                  key={oIdx} 
+                                  className={cn(
+                                    "flex items-center gap-3 p-3 rounded-lg border transition-all group relative",
+                                    q.correctOptionIndex === oIdx 
+                                      ? "bg-emerald-500/5 border-emerald-500/50 ring-1 ring-emerald-500/20" 
+                                      : "bg-background border-border"
+                                  )}
+                                >
+                                  <div className="flex flex-col items-center gap-1 min-w-[60px]">
+                                    <RadioGroupItem value={oIdx.toString()} id={`q${idx}-o${oIdx}`} className="scale-110" />
+                                    <Label htmlFor={`q${idx}-o${oIdx}`} className="text-[9px] uppercase font-bold text-muted-foreground cursor-pointer">
+                                      {q.correctOptionIndex === oIdx ? "Correct" : "Choice"}
+                                    </Label>
+                                  </div>
+
+                                  <div className="flex-1 flex items-center gap-2">
+                                    <span className="font-bold text-muted-foreground/50 w-4">{String.fromCharCode(65 + oIdx)}.</span>
+                                    <Input 
+                                      placeholder={`Enter choice content...`} 
+                                      value={opt} 
+                                      onChange={e => {
+                                        const opts = [...q.options]
+                                        opts[oIdx] = e.target.value
+                                        updateQuestion(q.id, 'options', opts)
+                                      }}
+                                      className="border-none shadow-none focus-visible:ring-0 p-0 h-auto text-sm"
+                                    />
+                                  </div>
+
+                                  {q.options.length > 2 && (
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      type="button"
+                                      onClick={() => removeOption(q.id, oIdx)}
+                                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <X className="w-3 h-3 text-muted-foreground" />
+                                    </Button>
+                                  )}
+                                  
+                                  {q.correctOptionIndex === oIdx && (
+                                    <CircleCheck className="absolute -right-2 -top-2 w-5 h-5 text-emerald-500 bg-background rounded-full" />
+                                  )}
                                 </div>
                               ))}
                             </RadioGroup>
@@ -544,8 +619,13 @@ export default function AdminDashboard() {
                  </div>
                </div>
 
-               <div className="flex justify-end gap-4 pt-8 pb-20">
-                 <Button type="button" className="px-10 py-6 text-lg btn-premium" onClick={handleSaveExam}>
+               <div className="fixed bottom-8 right-8 z-50 flex items-center gap-4">
+                 {examQuestions.length > 0 && (
+                   <Badge variant="secondary" className="bg-card shadow-lg px-4 py-2 border-primary/20 animate-in slide-in-from-right-4">
+                     {examQuestions.length} Questions Drafted
+                   </Badge>
+                 )}
+                 <Button type="button" className="px-10 py-6 text-lg btn-premium shadow-2xl" onClick={handleSaveExam}>
                    <Save className="w-4 h-4 mr-2" /> Finalize & Publish
                  </Button>
                </div>
