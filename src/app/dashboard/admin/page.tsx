@@ -42,6 +42,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/firebase"
 import { signOut, createUserWithEmailAndPassword } from "firebase/auth"
 import { cn } from "@/lib/utils"
+import { ModeToggle } from "@/components/mode-toggle"
 import {
   Dialog,
   DialogContent,
@@ -351,7 +352,8 @@ export default function AdminDashboard() {
           ))}
         </nav>
 
-        <div className="p-4 border-t">
+        <div className="p-4 border-t space-y-2">
+          <ModeToggle />
           <Button 
             variant="ghost" 
             className="w-full justify-start gap-3"
@@ -430,14 +432,19 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-[300px]">
-                      <div className="space-y-3">
-                        {exams?.map((exam) => (
-                          <div key={exam.id} className="flex items-center justify-between p-4 rounded-xl bg-muted border">
-                            <p className="text-sm font-bold">{exam.title}</p>
-                            <Button variant="ghost" size="sm" onClick={() => setActiveTab('exams')}><ChevronRight className="w-4 h-4" /></Button>
-                          </div>
-                        ))}
-                      </div>
+                      {examsLoading ? (
+                        <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
+                      ) : (
+                        <div className="space-y-3">
+                          {exams?.map((exam) => (
+                            <div key={exam.id} className="flex items-center justify-between p-4 rounded-xl bg-muted border">
+                              <p className="text-sm font-bold">{exam.title}</p>
+                              <Button variant="ghost" size="sm" onClick={() => setActiveTab('exams')}><ChevronRight className="w-4 h-4" /></Button>
+                            </div>
+                          ))}
+                          {exams?.length === 0 && <p className="text-center text-muted-foreground p-8">No assessments found.</p>}
+                        </div>
+                      )}
                     </ScrollArea>
                   </CardContent>
                 </Card>
@@ -452,20 +459,24 @@ export default function AdminDashboard() {
                  <Button onClick={() => setActiveTab('authoring')} className="gap-2"><Plus className="w-4 h-4" /> New Exam</Button>
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                 {exams?.map((exam) => (
-                   <Card key={exam.id} className="reveal-up hover:border-primary transition-all">
-                     <CardHeader>
-                       <CardTitle className="text-lg">{exam.title}</CardTitle>
-                       <CardDescription className="line-clamp-2">{exam.description}</CardDescription>
-                     </CardHeader>
-                     <CardContent className="flex items-center justify-between bg-muted/20 py-4 mt-4">
-                        <span className="text-xs font-bold text-muted-foreground uppercase">Pass: {exam.passingScore}%</span>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setExamToDelete(exam.id)}>
-                          <Trash2 className="w-4 h-4" /> Delete
-                        </Button>
-                     </CardContent>
-                   </Card>
-                 ))}
+                 {examsLoading ? (
+                   <div className="col-span-full flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>
+                 ) : (
+                   exams?.map((exam) => (
+                     <Card key={exam.id} className="reveal-up hover:border-primary transition-all">
+                       <CardHeader>
+                         <CardTitle className="text-lg">{exam.title}</CardTitle>
+                         <CardDescription className="line-clamp-2">{exam.description}</CardDescription>
+                       </CardHeader>
+                       <CardContent className="flex items-center justify-between bg-muted/20 py-4 mt-4">
+                          <span className="text-xs font-bold text-muted-foreground uppercase">Pass: {exam.passingScore}%</span>
+                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setExamToDelete(exam.id)}>
+                            <Trash2 className="w-4 h-4" /> Delete
+                          </Button>
+                       </CardContent>
+                     </Card>
+                   ))
+                 )}
                </div>
             </div>
           )}
@@ -508,7 +519,7 @@ export default function AdminDashboard() {
 
                  <div className="space-y-6 pb-24">
                    {examQuestions.map((q, idx) => (
-                     <Card key={q.id} className="border-l-4 border-l-primary shadow-sm">
+                     <Card key={q.id} className="border-l-4 border-l-primary shadow-sm animate-in fade-in slide-in-from-left-2">
                         <CardHeader className="flex flex-row items-center justify-between py-4 bg-muted/30">
                           <Badge>Question {idx + 1}</Badge>
                           <Button variant="ghost" size="sm" onClick={() => removeQuestion(q.id)} className="text-destructive h-8 w-8 p-0">
@@ -536,15 +547,18 @@ export default function AdminDashboard() {
                                     }}
                                     className="border-none shadow-none focus-visible:ring-0 p-0 h-auto"
                                   />
-                                  {q.options.length > 2 && (
-                                    <Button variant="ghost" size="icon" onClick={() => removeOption(q.id, oIdx)} className="h-6 w-6">
-                                      <X className="w-3 h-3" />
-                                    </Button>
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    {q.correctOptionIndex === oIdx && <Badge variant="outline" className="text-emerald-500 border-emerald-500/30 bg-emerald-500/5">Correct</Badge>}
+                                    {q.options.length > 2 && (
+                                      <Button variant="ghost" size="icon" onClick={() => removeOption(q.id, oIdx)} className="h-6 w-6">
+                                        <X className="w-3 h-3" />
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                             </RadioGroup>
-                            <Button variant="ghost" size="sm" onClick={() => addOption(q.id)} disabled={q.options.length >= 5} className="text-xs">+ Add Option</Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => addOption(q.id)} disabled={q.options.length >= 5} className="text-xs">+ Add Option</Button>
                           </div>
                         </CardContent>
                      </Card>
@@ -571,6 +585,7 @@ export default function AdminDashboard() {
                    <DialogContent>
                      <DialogHeader>
                        <DialogTitle>Provision New User</DialogTitle>
+                       <DialogDescription>Create a new secure identity in the gateway roster.</DialogDescription>
                      </DialogHeader>
                      <form onSubmit={handleProvisionUser} className="space-y-4 pt-4">
                         <Input required placeholder="Username" value={newStudent.username} onChange={e => setNewStudent({...newStudent, username: e.target.value})} />
@@ -590,54 +605,62 @@ export default function AdminDashboard() {
                </div>
 
                <Card className="reveal-up border-none shadow-sm p-6">
-                 <Table>
-                   <TableHeader>
-                     <TableRow>
-                       <TableHead>Username</TableHead>
-                       <TableHead>Email</TableHead>
-                       <TableHead>Role</TableHead>
-                       <TableHead className="text-right">Action</TableHead>
-                     </TableRow>
-                   </TableHeader>
-                   <TableBody>
-                     {allUsers?.map((u) => (
-                       <TableRow key={u.id}>
-                         <TableCell className="font-bold">{u.username}</TableCell>
-                         <TableCell>{u.email}</TableCell>
-                         <TableCell><Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>{u.role}</Badge></TableCell>
-                         <TableCell className="text-right">
-                           <Button variant="ghost" size="sm" onClick={() => setEditingUser(u)}><Edit2 className="w-3 h-3" /></Button>
-                         </TableCell>
+                 {usersLoading ? (
+                   <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
+                 ) : (
+                   <Table>
+                     <TableHeader>
+                       <TableRow>
+                         <TableHead>Username</TableHead>
+                         <TableHead>Email</TableHead>
+                         <TableHead>Role</TableHead>
+                         <TableHead className="text-right">Action</TableHead>
                        </TableRow>
-                     ))}
-                   </TableBody>
-                 </Table>
+                     </TableHeader>
+                     <TableBody>
+                       {allUsers?.map((u) => (
+                         <TableRow key={u.id}>
+                           <TableCell className="font-bold">{u.username}</TableCell>
+                           <TableCell>{u.email}</TableCell>
+                           <TableCell><Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>{u.role}</Badge></TableCell>
+                           <TableCell className="text-right">
+                             <Button variant="ghost" size="sm" onClick={() => setEditingUser(u)}><Edit2 className="w-3 h-3" /></Button>
+                           </TableCell>
+                         </TableRow>
+                       ))}
+                     </TableBody>
+                   </Table>
+                 )}
                </Card>
             </div>
           )}
 
           {activeTab === 'audit' && (
             <Card className="reveal-up border-none shadow-sm p-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Exam</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Integrity</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {results?.map((res) => (
-                    <TableRow key={res.id}>
-                      <TableCell>{res.studentEmail}</TableCell>
-                      <TableCell>{res.examTitle}</TableCell>
-                      <TableCell className="font-bold">{res.score}%</TableCell>
-                      <TableCell><Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'}>{res.integrityStatus}</Badge></TableCell>
+              {resultsLoading ? (
+                <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Student</TableHead>
+                      <TableHead>Exam</TableHead>
+                      <TableHead>Score</TableHead>
+                      <TableHead>Integrity</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {results?.map((res) => (
+                      <TableRow key={res.id}>
+                        <TableCell>{res.studentEmail}</TableCell>
+                        <TableCell>{res.examTitle}</TableCell>
+                        <TableCell className="font-bold">{res.score}%</TableCell>
+                        <TableCell><Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'}>{res.integrityStatus}</Badge></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </Card>
           )}
         </main>
@@ -645,20 +668,29 @@ export default function AdminDashboard() {
 
       <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Edit User</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Edit User Identity</DialogTitle>
+            <DialogDescription>Modify the system-level details for this roster identity.</DialogDescription>
+          </DialogHeader>
           {editingUser && (
             <form onSubmit={handleUpdateUser} className="space-y-4 pt-4">
-              <Input value={editingUser.username} onChange={e => setEditingUser({...editingUser, username: e.target.value})} />
-              <Select value={editingUser.role} onValueChange={(v: any) => setEditingUser({...editingUser, role: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="student">Student</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <Label>Username</Label>
+                <Input value={editingUser.username} onChange={e => setEditingUser({...editingUser, username: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>System Role</Label>
+                <Select value={editingUser.role} onValueChange={(v: any) => setEditingUser({...editingUser, role: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="student">Student</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex justify-end gap-3 pt-4">
                 <Button variant="outline" type="button" onClick={() => setEditingUser(null)}>Cancel</Button>
-                <Button type="submit">Save</Button>
+                <Button type="submit">Save Changes</Button>
               </div>
             </form>
           )}
@@ -668,12 +700,12 @@ export default function AdminDashboard() {
       <AlertDialog open={!!examToDelete} onOpenChange={(open) => !open && setExamToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Exam?</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+            <AlertDialogTitle>Purge Assessment?</AlertDialogTitle>
+            <AlertDialogDescription>This action will permanently remove the assessment and all associated data from the secure vault.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteExam} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteExam} className="bg-destructive text-destructive-foreground">Purge Data</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
