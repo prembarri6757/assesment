@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -40,6 +41,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/firebase"
 import { signOut, createUserWithEmailAndPassword } from "firebase/auth"
 import { cn } from "@/lib/utils"
+import { ModeToggle } from "@/components/mode-toggle"
 import {
   Dialog,
   DialogContent,
@@ -404,6 +406,7 @@ export default function AdminDashboard() {
             <h2 className="font-bold text-lg capitalize">{activeTab.replace('-', ' ')}</h2>
           </div>
           <div className="flex items-center gap-4">
+             <ModeToggle />
              <Badge variant="outline" className="text-[10px] uppercase tracking-widest bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
                {adminRoleLoading ? "Authenticating..." : "System Live"}
              </Badge>

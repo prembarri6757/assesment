@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect } from "react"
@@ -12,6 +13,7 @@ import { collection, doc } from "firebase/firestore"
 import { useAuth } from "@/firebase"
 import { signOut } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
+import { ModeToggle } from "@/components/mode-toggle"
 
 export default function StudentDashboard() {
   const containerRef = useScrollReveal()
@@ -70,6 +72,7 @@ export default function StudentDashboard() {
             <span className="font-bold text-xl hidden sm:inline-block">Student Portal</span>
           </div>
           <div className="flex items-center gap-4">
+            <ModeToggle />
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold">{user?.email}</p>
               <p className="text-[10px] text-muted-foreground">ID: {user?.uid.slice(0, 8)}</p>
