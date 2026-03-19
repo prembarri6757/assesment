@@ -5,26 +5,47 @@ import { useScrollReveal } from "@/hooks/use-scroll-reveal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Clock, BookOpen, Trophy, ShieldCheck, ChevronRight, History } from "lucide-react"
+import { Clock, BookOpen, Trophy, ShieldCheck, ChevronRight, LogOut } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
 import { collection, query, where } from "firebase/firestore"
+import { useAuth } from "@/firebase"
+import { signOut } from "firebase/auth"
 
 export default function StudentDashboard() {
   const containerRef = useScrollReveal()
   const router = useRouter()
   const db = useFirestore()
-  const { user } = useUser()
+  const auth = useAuth()
+  const { user, isUserLoading } = useUser()
 
-  // Queries
-  const examsQuery = useMemoFirebase(() => collection(db, "exams"), [db])
+  // Queries - Memoized to prevent re-renders and wait for auth
+  const examsQuery = useMemoFirebase(() => {
+    if (!user) return null
+    return collection(db, "exams")
+  }, [db, user])
   const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
 
   const resultsQuery = useMemoFirebase(() => {
     if (!user) return null
-    return query(collection(db, "results"), where("studentId", "==", user.uid))
+    // Results are stored at /users/{studentId}/results/{resultId}
+    return collection(db, "users", user.uid, "results")
   }, [db, user])
   const { data: results } = useCollection(resultsQuery)
+
+  const handleLogout = async () => {
+    await signOut(auth)
+    router.push('/')
+  }
+
+  if (isUserLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading portal...</div>
+  }
+
+  if (!user) {
+    router.push('/')
+    return null
+  }
 
   return (
     <div ref={containerRef} className="min-h-screen bg-background">
@@ -39,9 +60,11 @@ export default function StudentDashboard() {
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold">{user?.email}</p>
-              <p className="text-[10px] text-muted-foreground">Secure ID: {user?.uid.slice(0, 8)}</p>
+              <p className="text-[10px] text-muted-foreground">ID: {user?.uid.slice(0, 8)}</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => router.push('/')}>Logout</Button>
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="flex items-center gap-2">
+              <LogOut className="w-4 h-4" /> Logout
+            </Button>
           </div>
         </div>
       </nav>
@@ -62,7 +85,7 @@ export default function StudentDashboard() {
                 {exams?.map((exam) => (
                   <Card key={exam.id} className="group hover:border-primary transition-all duration-300">
                     <CardHeader>
-                      <Badge className="w-fit mb-2 bg-primary/10 text-primary hover:bg-primary/20">{exam.timeLimitMinutes}m duration</Badge>
+                      <Badge className="w-fit mb-2 bg-primary/10 text-primary">{exam.timeLimitMinutes}m duration</Badge>
                       <CardTitle className="group-hover:text-primary transition-colors">{exam.title}</CardTitle>
                       <CardDescription className="line-clamp-2">{exam.description}</CardDescription>
                     </CardHeader>
@@ -98,7 +121,9 @@ export default function StudentDashboard() {
                          </div>
                          <div>
                            <p className="font-medium text-sm">{res.examTitle}</p>
-                           <p className="text-xs text-muted-foreground">Completed: {res.completedAt ? new Date(res.completedAt).toLocaleDateString() : 'Unknown'}</p>
+                           <p className="text-xs text-muted-foreground">
+                             Completed: {res.completedAt ? new Date(res.completedAt.seconds * 1000).toLocaleDateString() : 'Unknown'}
+                           </p>
                          </div>
                       </div>
                       <div className="text-right">

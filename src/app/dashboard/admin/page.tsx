@@ -1,14 +1,14 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useScrollReveal } from "@/hooks/use-scroll-reveal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, LayoutDashboard, FileText, Users, ShieldAlert, Sparkles, Search, Trash2, Save } from "lucide-react"
+import { Plus, LayoutDashboard, FileText, Users, ShieldAlert, Sparkles, Search, Trash2, Save, LogOut } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
-import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore"
+import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, where, collectionGroup } from "firebase/firestore"
 import { generateQuestionIdeas, type GenerateQuestionIdeasOutput } from "@/ai/flows/admin-question-idea-generator"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -19,12 +19,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/firebase"
+import { signOut } from "firebase/auth"
 
 export default function AdminDashboard() {
   const containerRef = useScrollReveal()
   const db = useFirestore()
-  const { user } = useUser()
+  const auth = useAuth()
+  const { user, isUserLoading } = useUser()
   const { toast } = useToast()
+  const router = useRouter()
   
   // States for UI
   const [isGenerating, setIsGenerating] = useState(false)
@@ -41,12 +46,24 @@ export default function AdminDashboard() {
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
 
-  // Firestore Queries
-  const examsQuery = useMemoFirebase(() => collection(db, "exams"), [db])
+  // Firestore Queries - Memoized to prevent re-renders and wait for auth
+  const examsQuery = useMemoFirebase(() => {
+    if (!user) return null
+    return collection(db, "exams")
+  }, [db, user])
   const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
 
-  const resultsQuery = useMemoFirebase(() => collection(db, "results"), [db]) // Note: Group query or separate collection needed for global view
+  const resultsQuery = useMemoFirebase(() => {
+    if (!user) return null
+    // Collection Group query allows admins to see all results regardless of parent student path
+    return query(collectionGroup(db, "results"))
+  }, [db, user])
   const { data: results } = useCollection(resultsQuery)
+
+  const handleLogout = async () => {
+    await signOut(auth)
+    router.push('/')
+  }
 
   const handleGenerate = async () => {
     if (!topic) return
@@ -117,6 +134,15 @@ export default function AdminDashboard() {
     }
   }
 
+  if (isUserLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Verifying credentials...</div>
+  }
+
+  if (!user) {
+    router.push('/')
+    return null
+  }
+
   return (
     <div ref={containerRef} className="min-h-screen bg-background">
       <nav className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
@@ -129,7 +155,9 @@ export default function AdminDashboard() {
           </div>
           <div className="flex items-center gap-4">
             <Badge variant="outline" className="text-xs">Live System</Badge>
-            <Button variant="ghost" size="sm" onClick={() => window.location.href = '/'}>Logout</Button>
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="flex items-center gap-2">
+              <LogOut className="w-4 h-4" /> Logout
+            </Button>
           </div>
         </div>
       </nav>
@@ -235,8 +263,8 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
             { label: "Active Exams", value: exams?.length || "0", icon: FileText, color: "text-blue-500" },
-            { label: "Total Students", value: "...", icon: Users, color: "text-indigo-500" },
-            { label: "Completion Rate", value: "94%", icon: LayoutDashboard, color: "text-emerald-500" },
+            { label: "Total Sessions", value: results?.length || "0", icon: Users, color: "text-indigo-500" },
+            { label: "Global Compliance", value: "98%", icon: LayoutDashboard, color: "text-emerald-500" },
             { label: "Integrity Alerts", value: results?.filter(r => r.integrityStatus === 'Flagged').length || "0", icon: ShieldAlert, color: "text-red-500" },
           ].map((stat, i) => (
             <Card key={i} className="reveal-up glass-card">
@@ -353,7 +381,7 @@ export default function AdminDashboard() {
              <Card>
                <CardHeader>
                  <CardTitle>Global Integrity Log</CardTitle>
-                 <CardDescription>Real-time monitoring of active and completed sessions.</CardDescription>
+                 <CardDescription>Real-time monitoring of active and completed sessions across all students.</CardDescription>
                </CardHeader>
                <CardContent>
                  <Table>
@@ -369,7 +397,7 @@ export default function AdminDashboard() {
                    <TableBody>
                      {results?.map((res) => (
                        <TableRow key={res.id}>
-                         <TableCell className="font-medium">{res.studentEmail || res.studentId}</TableCell>
+                         <TableCell className="font-medium">{res.studentEmail || "Anonymous Student"}</TableCell>
                          <TableCell>{res.examTitle}</TableCell>
                          <TableCell className="font-bold">{res.score}%</TableCell>
                          <TableCell>
@@ -378,14 +406,14 @@ export default function AdminDashboard() {
                            </Badge>
                          </TableCell>
                          <TableCell className="text-xs text-muted-foreground">
-                           {res.completedAt ? new Date(res.completedAt).toLocaleString() : 'Active...'}
+                           {res.completedAt ? new Date(res.completedAt.seconds * 1000).toLocaleString() : 'In Progress...'}
                          </TableCell>
                        </TableRow>
                      ))}
                    </TableBody>
                  </Table>
                  {(!results || results.length === 0) && (
-                   <p className="text-center py-10 text-muted-foreground">No records found.</p>
+                   <p className="text-center py-10 text-muted-foreground">No records found in the vault.</p>
                  )}
                </CardContent>
              </Card>

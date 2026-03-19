@@ -38,13 +38,14 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const [isStarted, setIsStarted] = useState(false)
   const [resultId, setResultId] = useState<string | null>(null)
 
-  // Initial Sync: Create Result document when started
+  // Initial Sync: Create Result document at the correct path /users/{uid}/results/{id}
   const initializeExam = async () => {
     if (!user || !exam) return
-    const newResultId = doc(collection(db, "results")).id
+    const newResultId = doc(collection(db, "users", user.uid, "results")).id
     setResultId(newResultId)
     
-    await setDoc(doc(db, "results", newResultId), {
+    const resultRef = doc(db, "users", user.uid, "results", newResultId)
+    await setDoc(resultRef, {
       id: newResultId,
       studentId: user.uid,
       studentEmail: user.email,
@@ -71,17 +72,17 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
 
   // Auto-Save Effect
   useEffect(() => {
-    if (isStarted && !isFinished && resultId && Object.keys(answers).length > 0) {
-      const resultRef = doc(db, "results", resultId)
+    if (isStarted && !isFinished && resultId && user && Object.keys(answers).length > 0) {
+      const resultRef = doc(db, "users", user.uid, "results", resultId)
       // Non-blocking update
       setDoc(resultRef, { answers }, { merge: true })
       // LocalStorage backup
       localStorage.setItem(`exam_draft_${id}`, JSON.stringify(answers))
     }
-  }, [answers, isStarted, isFinished, resultId, db, id])
+  }, [answers, isStarted, isFinished, resultId, db, id, user])
 
   const finishExam = useCallback(async () => {
-    if (isFinished || !resultId || !exam || !questions) return
+    if (isFinished || !resultId || !exam || !questions || !user) return
     setIsFinished(true)
 
     // Calculate score
@@ -93,7 +94,8 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     })
     const finalScore = Math.round((correctCount / questions.length) * 100)
 
-    await setDoc(doc(db, "results", resultId), {
+    const resultRef = doc(db, "users", user.uid, "results", resultId)
+    await setDoc(resultRef, {
       score: finalScore,
       completedAt: serverTimestamp(),
       integrityStatus: isFlagged ? 'Flagged' : 'Clean'
@@ -102,15 +104,16 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     if (document.fullscreenElement) {
       document.exitFullscreen()
     }
-  }, [isFinished, resultId, exam, questions, answers, isFlagged, db])
+  }, [isFinished, resultId, exam, questions, answers, isFlagged, db, user])
 
   // Anti-Cheat: Tab switching detection
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && isStarted && !isFinished) {
         setIsFlagged(true)
-        if (resultId) {
-          setDoc(doc(db, "results", resultId), { integrityStatus: 'Flagged' }, { merge: true })
+        if (resultId && user) {
+          const resultRef = doc(db, "users", user.uid, "results", resultId)
+          setDoc(resultRef, { integrityStatus: 'Flagged' }, { merge: true })
         }
         toast({
           title: "SECURITY ALERT",
@@ -135,7 +138,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       document.removeEventListener("visibilitychange", handleVisibilityChange)
       window.removeEventListener("blur", handleFocusLoss)
     }
-  }, [isStarted, isFinished, resultId, db, toast])
+  }, [isStarted, isFinished, resultId, db, toast, user])
 
   // Timer
   useEffect(() => {
