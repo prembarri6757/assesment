@@ -4,11 +4,6 @@ service cloud.firestore {
 
     /**
      * SECURE ASSESSMENT GATEWAY: SECURITY RULES CONFIGURATION
-     * 
-     * Core Philosophy:
-     * This ruleset enforces a strict dual-access model: Ownership-based access for students 
-     * and Role-based access for administrators. Security is achieved via Structural Segregation
-     * and Authorization Independence, minimizing cross-document lookups.
      */
 
     // --- GLOBAL HELPER FUNCTIONS ---
@@ -25,44 +20,39 @@ service cloud.firestore {
       return isSignedIn() && exists(/databases/$(database)/documents/admin_roles/$(request.auth.uid));
     }
 
-    function isDocumentCreatedByOwner(creatorUid) {
-      return creatorUid == request.auth.uid;
-    }
-
     // --- COLLECTION RULES ---
 
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
-      allow list: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isOwner(userId) && request.resource.data.id == resource.data.id;
+      allow list: if isAdmin(); // Allow admins to see the user list for management
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
     }
 
     match /admin_roles/{adminId} {
       allow get: if isSignedIn();
       allow list: if isAdmin();
-      // Allow creation during sign-up for prototype purposes
-      allow create: if isOwner(adminId); 
-      allow update, delete: if false; 
+      // Allow creation during sign-up OR by an existing admin
+      allow create: if isOwner(adminId) || isAdmin(); 
+      allow delete: if isAdmin(); 
+      allow update: if false;
     }
 
     match /exams/{examId} {
       allow get, list: if isSignedIn();
-      allow create: if isAdmin() && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if isAdmin() && isDocumentCreatedByOwner(resource.data.createdBy);
+      allow create, update, delete: if isAdmin();
     }
 
     match /exams/{examId}/questions/{questionId} {
-      allow get, list: if isAdmin() && isDocumentCreatedByOwner(resource.data.examCreatedBy);
-      allow create: if isAdmin() && isDocumentCreatedByOwner(request.resource.data.examCreatedBy);
-      allow update, delete: if isAdmin() && isDocumentCreatedByOwner(resource.data.examCreatedBy);
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /users/{studentId}/results/{resultId} {
       allow get, list: if isOwner(studentId) || isAdmin();
-      allow create: if isOwner(studentId) && request.resource.data.studentId == studentId;
-      allow update: if isOwner(studentId) && request.resource.data.studentId == resource.data.studentId;
+      allow create: if isOwner(studentId);
+      allow update: if isOwner(studentId) || isAdmin();
       allow delete: if isAdmin();
     }
 

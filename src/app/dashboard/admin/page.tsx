@@ -5,7 +5,7 @@ import { useScrollReveal } from "@/hooks/use-scroll-reveal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, LayoutDashboard, FileText, Users, ShieldAlert, Sparkles, Search, Trash2, Save, LogOut } from "lucide-react"
+import { Plus, LayoutDashboard, FileText, Users, ShieldAlert, Sparkles, Search, Trash2, Save, LogOut, UserPlus, ShieldCheck } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup } from "firebase/firestore"
 import { generateQuestionIdeas, type GenerateQuestionIdeasOutput } from "@/ai/flows/admin-question-idea-generator"
@@ -43,6 +43,13 @@ export default function AdminDashboard() {
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
 
+  // Auth Redirection
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/')
+    }
+  }, [user, isUserLoading, router])
+
   const adminRoleRef = useMemoFirebase(() => {
     if (!user) return null
     return doc(db, "admin_roles", user.uid)
@@ -61,16 +68,17 @@ export default function AdminDashboard() {
   }, [db, user, adminRole])
   const { data: results } = useCollection(resultsQuery)
 
-  useEffect(() => {
-    if (!isUserLoading && !user) {
-      router.push('/')
-    }
-    // Redirect if they are logged in but not an admin
-    if (!isUserLoading && !adminRoleLoading && user && !adminRole) {
-      toast({ title: "Access Denied", description: "This portal is for administrators only.", variant: "destructive" })
-      router.push('/dashboard/student')
-    }
-  }, [user, isUserLoading, adminRole, adminRoleLoading, router, toast])
+  const usersQuery = useMemoFirebase(() => {
+    if (!user || !adminRole) return null
+    return collection(db, "users")
+  }, [db, user, adminRole])
+  const { data: allUsers } = useCollection(usersQuery)
+
+  const adminRolesQuery = useMemoFirebase(() => {
+    if (!user || !adminRole) return null
+    return collection(db, "admin_roles")
+  }, [db, user, adminRole])
+  const { data: allAdminRoles } = useCollection(adminRolesQuery)
 
   const handleLogout = async () => {
     await signOut(auth)
@@ -145,12 +153,38 @@ export default function AdminDashboard() {
     }
   }
 
+  const toggleAdminRole = async (targetUserId: string, currentStatus: boolean) => {
+    try {
+      const roleRef = doc(db, "admin_roles", targetUserId)
+      if (currentStatus) {
+        if (targetUserId === user?.uid) {
+          toast({ title: "Action Denied", description: "You cannot revoke your own admin rights.", variant: "destructive" })
+          return
+        }
+        await deleteDoc(roleRef)
+        toast({ title: "Role Updated", description: "Administrator access revoked." })
+      } else {
+        await setDoc(roleRef, { uid: targetUserId, createdAt: serverTimestamp() })
+        toast({ title: "Role Updated", description: "Administrator access granted." })
+      }
+    } catch (error: any) {
+      toast({ title: "Update Failed", description: error.message, variant: "destructive" })
+    }
+  }
+
   if (isUserLoading || adminRoleLoading) {
     return <div className="min-h-screen flex items-center justify-center">Verifying credentials...</div>
   }
 
   if (!user || !adminRole) {
-    return null
+    return (
+      <div className="min-h-screen flex items-center justify-center flex-col gap-4">
+        <ShieldAlert className="w-12 h-12 text-destructive" />
+        <h2 className="text-xl font-bold">Access Restricted</h2>
+        <p className="text-muted-foreground">This portal is for authorized administrators only.</p>
+        <Button onClick={() => router.push('/')}>Return Home</Button>
+      </div>
+    )
   }
 
   return (
@@ -272,8 +306,8 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
             { label: "Active Exams", value: exams?.length || "0", icon: FileText, color: "text-blue-500" },
-            { label: "Total Sessions", value: results?.length || "0", icon: Users, color: "text-indigo-500" },
-            { label: "Global Compliance", value: "98%", icon: LayoutDashboard, color: "text-emerald-500" },
+            { label: "Total Students", value: allUsers?.length || "0", icon: Users, color: "text-indigo-500" },
+            { label: "Total Results", value: results?.length || "0", icon: LayoutDashboard, color: "text-emerald-500" },
             { label: "Integrity Alerts", value: results?.filter(r => r.integrityStatus === 'Flagged').length || "0", icon: ShieldAlert, color: "text-red-500" },
           ].map((stat, i) => (
             <Card key={i} className="reveal-up glass-card">
@@ -296,7 +330,8 @@ export default function AdminDashboard() {
             <TabsTrigger value="ai-generator" className="h-full px-6 flex items-center gap-2">
               <Sparkles className="w-4 h-4" /> AI Tool
             </TabsTrigger>
-            <TabsTrigger value="results" className="h-full px-6">Results & Integrity</TabsTrigger>
+            <TabsTrigger value="results" className="h-full px-6">Results</TabsTrigger>
+            <TabsTrigger value="users" className="h-full px-6">Users</TabsTrigger>
           </TabsList>
 
           <TabsContent value="exams" className="space-y-4">
@@ -318,12 +353,6 @@ export default function AdminDashboard() {
                   </CardContent>
                 </Card>
               ))}
-              {(!exams || exams.length === 0) && !examsLoading && (
-                <div className="text-center py-20 border-2 border-dashed rounded-xl opacity-50">
-                  <FileText className="w-12 h-12 mx-auto mb-4" />
-                  <p>No exams created yet. Start by clicking "Create New Exam".</p>
-                </div>
-              )}
             </div>
           </TabsContent>
 
@@ -334,49 +363,25 @@ export default function AdminDashboard() {
                   <Sparkles className="w-5 h-5 text-primary" />
                   AI Question Idea Generator
                 </CardTitle>
-                <CardDescription>
-                  Enter a topic to generate diverse question ideas using GenAI.
-                </CardDescription>
               </CardHeader>
               <CardContent className="p-6 space-y-6">
                 <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                    <Input 
-                      placeholder="e.g. Network Security Fundamentals" 
-                      className="pl-10 h-12"
-                      value={topic}
-                      onChange={(e) => setTopic(e.target.value)}
-                    />
-                  </div>
-                  <Button 
-                    onClick={handleGenerate} 
-                    disabled={isGenerating || !topic}
-                    className="h-12 btn-premium"
-                  >
+                  <Input 
+                    placeholder="Topic e.g. Network Security" 
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                  />
+                  <Button onClick={handleGenerate} disabled={isGenerating || !topic}>
                     {isGenerating ? "Analyzing..." : "Generate Ideas"}
                   </Button>
                 </div>
-
                 {aiIdeas && (
-                  <ScrollArea className="h-[400px] rounded-lg border p-4 bg-muted/20">
+                  <ScrollArea className="h-[400px] rounded-lg border p-4">
                     <div className="space-y-4">
                       {aiIdeas.questions.map((q, idx) => (
-                        <Card key={idx} className="bg-card animate-in slide-in-from-bottom-2 duration-300">
-                          <CardHeader className="p-4">
-                            <CardTitle className="text-sm font-semibold">Idea {idx + 1}</CardTitle>
-                            <p className="text-md">{q.questionText}</p>
-                          </CardHeader>
-                          <CardContent className="p-4 pt-0 space-y-2">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {q.suggestedOptions.map((opt, oIdx) => (
-                                <div key={oIdx} className={`text-xs p-2 rounded border ${oIdx === q.correctOptionIndex ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-600 font-bold' : 'bg-background'}`}>
-                                  {opt}
-                                </div>
-                              ))}
-                            </div>
-                            <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => addQuestion(q)}>Add to current exam builder</Button>
-                          </CardContent>
+                        <Card key={idx} className="p-4">
+                          <p className="font-bold mb-2">{q.questionText}</p>
+                          <Button variant="link" size="sm" onClick={() => addQuestion(q)}>Add to exam</Button>
                         </Card>
                       ))}
                     </div>
@@ -388,10 +393,7 @@ export default function AdminDashboard() {
 
           <TabsContent value="results">
              <Card>
-               <CardHeader>
-                 <CardTitle>Global Integrity Log</CardTitle>
-                 <CardDescription>Real-time monitoring of active and completed sessions across all students.</CardDescription>
-               </CardHeader>
+               <CardHeader><CardTitle>Global Integrity Log</CardTitle></CardHeader>
                <CardContent>
                  <Table>
                    <TableHeader>
@@ -400,13 +402,12 @@ export default function AdminDashboard() {
                        <TableHead>Assessment</TableHead>
                        <TableHead>Score</TableHead>
                        <TableHead>Status</TableHead>
-                       <TableHead>Completed At</TableHead>
                      </TableRow>
                    </TableHeader>
                    <TableBody>
                      {results?.map((res) => (
                        <TableRow key={res.id}>
-                         <TableCell className="font-medium">{res.studentEmail || "Anonymous Student"}</TableCell>
+                         <TableCell>{res.studentEmail}</TableCell>
                          <TableCell>{res.examTitle}</TableCell>
                          <TableCell className="font-bold">{res.score}%</TableCell>
                          <TableCell>
@@ -414,18 +415,58 @@ export default function AdminDashboard() {
                              {res.integrityStatus}
                            </Badge>
                          </TableCell>
-                         <TableCell className="text-xs text-muted-foreground">
-                           {res.completedAt ? new Date(res.completedAt.seconds * 1000).toLocaleString() : 'In Progress...'}
-                         </TableCell>
                        </TableRow>
                      ))}
                    </TableBody>
                  </Table>
-                 {(!results || results.length === 0) && (
-                   <p className="text-center py-10 text-muted-foreground">No records found in the vault.</p>
-                 )}
                </CardContent>
              </Card>
+          </TabsContent>
+
+          <TabsContent value="users">
+            <Card>
+              <CardHeader>
+                <CardTitle>User Management</CardTitle>
+                <CardDescription>View all registered users and manage administrator privileges.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Username</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allUsers?.map((u) => {
+                      const isTargetAdmin = allAdminRoles?.some(role => role.id === u.id)
+                      return (
+                        <TableRow key={u.id}>
+                          <TableCell className="font-medium">{u.username || "N/A"}</TableCell>
+                          <TableCell>{u.email}</TableCell>
+                          <TableCell>
+                            <Badge variant={isTargetAdmin ? "default" : "secondary"}>
+                              {isTargetAdmin ? "Admin" : "Student"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button 
+                              variant={isTargetAdmin ? "destructive" : "outline"} 
+                              size="sm"
+                              onClick={() => toggleAdminRole(u.id, !!isTargetAdmin)}
+                            >
+                              {isTargetAdmin ? "Revoke Admin" : "Make Admin"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
