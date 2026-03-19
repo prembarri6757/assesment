@@ -1,0 +1,139 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * SECURE ASSESSMENT GATEWAY: SECURITY RULES CONFIGURATION
+     * 
+     * Core Philosophy:
+     * This ruleset enforces a strict dual-access model: Ownership-based access for students 
+     * and Role-based access for administrators. Security is achieved via Structural Segregation
+     * and Authorization Independence, minimizing cross-document lookups.
+     * 
+     * Data Structure:
+     * - /users/{userId}: Private user profiles owned by the student.
+     * - /admin_roles/{adminId}: Marker collection where document existence grants admin privileges.
+     * - /exams/{examId}: Exam definitions created by admins, readable by all authenticated users.
+     * - /exams/{examId}/questions/{questionId}: Sensitive question data accessible only to exam owners.
+     * - /users/{userId}/results/{resultId}: Private exam outcomes, owned by the student.
+     * 
+     * Key Security Decisions:
+     * 1. Authorization Independence: Admin roles are checked via existence in a dedicated path 
+     *    (/admin_roles) rather than a field on the user document, allowing for clean segregation.
+     * 2. Question Protection: Questions containing correct answers are restricted to Admins only. 
+     *    Students interact with exam content via secure RPCs/Functions.
+     * 3. Denormalization for Authorization: Questions contain 'examCreatedBy' to allow 
+     *    immediate ownership verification without reading the parent Exam document.
+     * 4. Relational Integrity: Rules enforce that internal 'id' or 'owner' fields match 
+     *    the document path to prevent data spoofing.
+     */
+
+    // --- GLOBAL HELPER FUNCTIONS ---
+
+    /** @description Checks if the user is authenticated. */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /** @description Checks if the user's UID matches the provided userId. */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /** @description Checks if the user is an administrator via the marker collection. */
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admin_roles/$(request.auth.uid));
+    }
+
+    /**
+     * @description Verifies that a document's creator ID (e.g., from 'createdBy' or 'examCreatedBy' field)
+     * matches the currently authenticated user's UID.
+     * Use with `resource.data.fieldName` for existing documents or `request.resource.data.fieldName` for new documents.
+     * @param {string} creatorUid - The UID found in the document's creator field (e.g., `resource.data.createdBy`).
+     */
+    function isDocumentCreatedByOwner(creatorUid) {
+      // Assumes isSignedIn() is checked by the calling rule (e.g., isAdmin()).
+      return creatorUid == request.auth.uid;
+    }
+
+    // --- COLLECTION RULES ---
+
+    /**
+     * @description Rules for User profiles. Users manage their own profiles; Admins have oversight.
+     * @path /users/{userId}
+     * @allow (get) If the user is the owner or an admin.
+     * @deny (create) If the authenticated UID does not match the userId in the path.
+     * @principle Restricts access to a user's own data tree and enforces self-creation logic.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Marker collection for admin roles. Writes are restricted to prevent self-elevation.
+     * @path /admin_roles/{adminId}
+     * @allow (get) Any signed-in user can check if a UID is an admin.
+     * @deny (create) All client-side writes; managed via backend or superuser.
+     * @principle Structural segregation of roles for authorization independence.
+     */
+    match /admin_roles/{adminId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create, update, delete: if false; 
+    }
+
+    /**
+     * @description Exam definitions. Public read for students; Admin-only writes.
+     * @path /exams/{examId}
+     * @allow (list) All signed-in users can browse exams.
+     * @deny (update) If the admin attempting the update did not create the exam.
+     * @principle Public read with owner-only writes.
+     */
+    match /exams/{examId} {
+      allow get, list: if isSignedIn();
+      allow create: if isAdmin() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isAdmin() && isDocumentCreatedByOwner(resource.data.createdBy);
+    }
+
+    /**
+     * @description Questions subcollection. Restricted to the exam creator to protect answers.
+     * @path /exams/{examId}/questions/{questionId}
+     * @allow (create) If user is an admin and sets examCreatedBy to their own UID.
+     * @deny (get) For students, as this document contains correct answers.
+     * @principle Authorization independence via denormalized ownership fields.
+     */
+    match /exams/{examId}/questions/{questionId} {
+      allow get, list: if isAdmin() && isDocumentCreatedByOwner(resource.data.examCreatedBy);
+      allow create: if isAdmin() && isDocumentCreatedByOwner(request.resource.data.examCreatedBy);
+      allow update, delete: if isAdmin() && isDocumentCreatedByOwner(resource.data.examCreatedBy);
+    }
+
+    /**
+     * @description Student exam results. Students see only their results; Admins see all.
+     * @path /users/{studentId}/results/{resultId}
+     * @allow (create) If the studentId matches the auth UID and path.
+     * @deny (update) If the studentId field is being changed.
+     * @principle Enforces path-based ownership and relational integrity.
+     */
+    match /users/{studentId}/results/{resultId} {
+      allow get, list: if isOwner(studentId) || isAdmin();
+      allow create: if isOwner(studentId) && request.resource.data.studentId == studentId;
+      allow update: if isOwner(studentId) && request.resource.data.studentId == resource.data.studentId;
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Collection Group rule for results to allow Admin oversight across all students.
+     * @path {path=**}/results/{resultId}
+     * @allow (list) Only for administrators.
+     * @deny (list) For non-admin users.
+     */
+    match /{path=**}/results/{resultId} {
+      allow list: if isAdmin();
+    }
+  }
+}
