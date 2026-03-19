@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -23,7 +22,8 @@ import {
   UserPlus,
   CircleCheck,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Edit2
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup } from "firebase/firestore"
@@ -58,6 +58,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 export default function AdminDashboard() {
   const containerRef = useScrollReveal()
@@ -76,7 +83,10 @@ export default function AdminDashboard() {
   
   // Provisioning State
   const [isProvisioning, setIsProvisioning] = useState(false)
-  const [newStudent, setNewStudent] = useState({ email: "", password: "", username: "" })
+  const [newStudent, setNewStudent] = useState({ email: "", password: "", username: "", role: "student" as "student" | "admin" })
+
+  // User Management State
+  const [editingUser, setEditingUser] = useState<any | null>(null)
 
   // Exam State
   const [newExam, setNewExam] = useState({
@@ -246,7 +256,7 @@ export default function AdminDashboard() {
     setActiveTab("exams")
   }
 
-  const handleProvisionStudent = async (e: React.FormEvent) => {
+  const handleProvisionUser = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsProvisioning(true)
     try {
@@ -257,12 +267,19 @@ export default function AdminDashboard() {
         id: newUser.uid,
         email: newUser.email,
         username: newStudent.username,
-        role: 'student',
+        role: newStudent.role,
         createdAt: serverTimestamp()
       })
 
-      toast({ title: "Student Provisioned", description: `Account created for ${newStudent.username}.` })
-      setNewStudent({ email: "", password: "", username: "" })
+      if (newStudent.role === 'admin') {
+        await setDoc(doc(db, "admin_roles", newUser.uid), {
+          uid: newUser.uid,
+          createdAt: serverTimestamp()
+        })
+      }
+
+      toast({ title: "User Provisioned", description: `Account created for ${newStudent.username}.` })
+      setNewStudent({ email: "", password: "", username: "", role: "student" })
     } catch (error: any) {
       toast({ title: "Provisioning Error", description: error.message, variant: "destructive" })
     } finally {
@@ -270,25 +287,35 @@ export default function AdminDashboard() {
     }
   }
 
-  const handlePromote = (uid: string) => {
-    const roleRef = doc(db, "admin_roles", uid)
-    const userRef = doc(db, "users", uid)
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingUser) return
 
-    setDoc(roleRef, { uid, createdAt: serverTimestamp() }).catch(e => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: roleRef.path,
-        operation: 'create'
-      }))
-    })
+    const userRef = doc(db, "users", editingUser.id)
+    const adminRoleRef = doc(db, "admin_roles", editingUser.id)
 
-    setDoc(userRef, { role: 'admin' }, { merge: true }).catch(e => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: userRef.path,
-        operation: 'update'
-      }))
-    })
+    try {
+      // Update User Profile
+      await setDoc(userRef, {
+        username: editingUser.username,
+        role: editingUser.role
+      }, { merge: true })
 
-    toast({ title: "User Promoted", description: "Administrative privileges granted." })
+      // Manage Admin Role Marker
+      if (editingUser.role === 'admin') {
+        await setDoc(adminRoleRef, {
+          uid: editingUser.id,
+          createdAt: serverTimestamp()
+        }, { merge: true })
+      } else {
+        await deleteDoc(adminRoleRef)
+      }
+
+      toast({ title: "User Updated", description: "The system roster has been synchronized." })
+      setEditingUser(null)
+    } catch (error: any) {
+      toast({ title: "Update Error", description: error.message, variant: "destructive" })
+    }
   }
 
   if (isUserLoading && !user) {
@@ -407,49 +434,77 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
-              <Card className="border-none shadow-sm bg-primary/5">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-primary" /> Content Idea Lab
-                  </CardTitle>
-                  <CardDescription>Generate secure assessment patterns using generative AI.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex gap-4">
-                    <Input 
-                      placeholder="e.g. Advanced Cryptography" 
-                      value={topic}
-                      onChange={(e) => setTopic(e.target.value)}
-                      className="bg-background flex-1"
-                    />
-                    <Button type="button" onClick={handleGenerate} disabled={isGenerating || !topic}>
-                      {isGenerating ? "Reasoning..." : "Generate Ideas"}
-                    </Button>
-                  </div>
-                  {aiIdeas && (
-                    <ScrollArea className="h-64 rounded-xl border bg-background p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {aiIdeas.questions.map((q, idx) => (
-                          <div key={idx} className="p-4 rounded-lg bg-muted border border-transparent hover:border-primary/20 transition-all group">
-                            <p className="font-bold text-sm mb-2">{q.questionText}</p>
-                            <Button 
-                              variant="link" 
-                              type="button"
-                              className="h-auto p-0 text-xs text-primary" 
-                              onClick={() => {
-                                addQuestion(q)
-                                setActiveTab("authoring")
-                              }}
-                            >
-                              Import to Builder <Plus className="ml-1 w-3 h-3" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <Card className="border-none shadow-sm bg-primary/5">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-primary" /> Content Idea Lab
+                    </CardTitle>
+                    <CardDescription>Generate secure assessment patterns using generative AI.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex gap-4">
+                      <Input 
+                        placeholder="e.g. Advanced Cryptography" 
+                        value={topic}
+                        onChange={(e) => setTopic(e.target.value)}
+                        className="bg-background flex-1"
+                      />
+                      <Button type="button" onClick={handleGenerate} disabled={isGenerating || !topic}>
+                        {isGenerating ? "Reasoning..." : "Generate Ideas"}
+                      </Button>
+                    </div>
+                    {aiIdeas && (
+                      <ScrollArea className="h-64 rounded-xl border bg-background p-4">
+                        <div className="grid grid-cols-1 gap-4">
+                          {aiIdeas.questions.map((q, idx) => (
+                            <div key={idx} className="p-4 rounded-lg bg-muted border border-transparent hover:border-primary/20 transition-all group">
+                              <p className="font-bold text-sm mb-2">{q.questionText}</p>
+                              <Button 
+                                variant="link" 
+                                type="button"
+                                className="h-auto p-0 text-xs text-primary" 
+                                onClick={() => {
+                                  addQuestion(q)
+                                  setActiveTab("authoring")
+                                }}
+                              >
+                                Import to Builder <Plus className="ml-1 w-3 h-3" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-none shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-primary" /> Published Assessments
+                    </CardTitle>
+                    <CardDescription>All active exams currently in the vault.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[300px]">
+                      <div className="space-y-3">
+                        {exams?.map((exam) => (
+                          <div key={exam.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border hover:border-primary/20 transition-colors">
+                            <div className="space-y-0.5">
+                              <p className="text-sm font-bold">{exam.title}</p>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-widest">{exam.timeLimitMinutes}M • {exam.passingScore}% PASS</p>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => setActiveTab('exams')}>
+                              <ChevronRight className="w-4 h-4" />
                             </Button>
                           </div>
                         ))}
                       </div>
                     </ScrollArea>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
 
@@ -668,14 +723,14 @@ export default function AdminDashboard() {
                  <h2 className="text-2xl font-bold">User Management</h2>
                  <Dialog>
                    <DialogTrigger asChild>
-                     <Button type="button" className="gap-2"><UserPlus className="w-4 h-4" /> Provision Student</Button>
+                     <Button type="button" className="gap-2"><UserPlus className="w-4 h-4" /> Provision Identity</Button>
                    </DialogTrigger>
                    <DialogContent>
                      <DialogHeader>
-                       <DialogTitle>Provision New Student</DialogTitle>
-                       <DialogDescription>Create a managed student identity for the secure gateway.</DialogDescription>
+                       <DialogTitle>Provision New User</DialogTitle>
+                       <DialogDescription>Create a managed identity for the secure gateway.</DialogDescription>
                      </DialogHeader>
-                     <form onSubmit={handleProvisionStudent} className="space-y-4 pt-4">
+                     <form onSubmit={handleProvisionUser} className="space-y-4 pt-4">
                         <div className="space-y-2">
                           <Label>Username</Label>
                           <Input required value={newStudent.username} onChange={e => setNewStudent({...newStudent, username: e.target.value})} />
@@ -688,6 +743,18 @@ export default function AdminDashboard() {
                           <Label>Temporary Password</Label>
                           <Input required type="password" value={newStudent.password} onChange={e => setNewStudent({...newStudent, password: e.target.value})} />
                         </div>
+                        <div className="space-y-2">
+                          <Label>System Role</Label>
+                          <Select value={newStudent.role} onValueChange={(v: any) => setNewStudent({...newStudent, role: v})}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="student">Student</SelectItem>
+                              <SelectItem value="admin">Administrator</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                         <Button type="submit" className="w-full" disabled={isProvisioning}>
                           {isProvisioning ? "Provisioning..." : "Create Account"}
                         </Button>
@@ -699,7 +766,7 @@ export default function AdminDashboard() {
                <Card className="border-none shadow-sm">
                  <CardHeader>
                    <CardTitle>System Roster</CardTitle>
-                   <CardDescription>Manage user identities and elevate administrative roles.</CardDescription>
+                   <CardDescription>Manage user identities, update profiles, and elevate administrative roles.</CardDescription>
                  </CardHeader>
                  <CardContent>
                     <Table>
@@ -720,16 +787,15 @@ export default function AdminDashboard() {
                               <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>{u.role}</Badge>
                             </TableCell>
                             <TableCell className="text-right">
-                               {u.role !== 'admin' && (
-                                 <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  type="button"
-                                  onClick={() => handlePromote(u.id)}
-                                >
-                                  Elevate to Admin
-                                </Button>
-                               )}
+                               <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                type="button"
+                                className="gap-2"
+                                onClick={() => setEditingUser(u)}
+                              >
+                                <Edit2 className="w-3 h-3" /> Edit Profile
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -780,6 +846,46 @@ export default function AdminDashboard() {
           )}
         </main>
       </div>
+
+      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit System Identity</DialogTitle>
+            <DialogDescription>Modify user credentials and administrative clearance markers.</DialogDescription>
+          </DialogHeader>
+          {editingUser && (
+            <form onSubmit={handleUpdateUser} className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label>Username</Label>
+                <Input 
+                  value={editingUser.username} 
+                  onChange={e => setEditingUser({...editingUser, username: e.target.value})} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Email (Read-only)</Label>
+                <Input value={editingUser.email} readOnly className="bg-muted opacity-70 cursor-not-allowed" />
+              </div>
+              <div className="space-y-2">
+                <Label>System Role</Label>
+                <Select value={editingUser.role} onValueChange={(v: any) => setEditingUser({...editingUser, role: v})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="student">Student</SelectItem>
+                    <SelectItem value="admin">Administrator</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="outline" type="button" onClick={() => setEditingUser(null)}>Cancel</Button>
+                <Button type="submit">Save Changes</Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!examToDelete} onOpenChange={(open) => !open && setExamToDelete(null)}>
         <AlertDialogContent>
