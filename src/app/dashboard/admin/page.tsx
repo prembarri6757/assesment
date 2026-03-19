@@ -24,7 +24,8 @@ import {
   CircleCheck,
   X,
   AlertTriangle,
-  Edit2
+  Edit2,
+  Loader2
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup } from "firebase/firestore"
@@ -99,7 +100,7 @@ export default function AdminDashboard() {
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
 
-  // Role check
+  // Role check - Critical for Dashboard access
   const adminRoleRef = useMemoFirebase(() => {
     if (!user) return null
     return doc(db, "admin_roles", user.uid)
@@ -113,24 +114,24 @@ export default function AdminDashboard() {
     }
   }, [user, isUserLoading, router])
 
-  // System Data
+  // System Data - Stabilized queries by removing adminRole dependency to prevent flickers on sync
   const examsQuery = useMemoFirebase(() => {
-    if (!user || !adminRole) return null
+    if (!user) return null
     return collection(db, "exams")
-  }, [db, user, adminRole])
-  const { data: exams } = useCollection(examsQuery)
+  }, [db, user])
+  const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
 
   const resultsQuery = useMemoFirebase(() => {
-    if (!user || !adminRole) return null
+    if (!user) return null
     return query(collectionGroup(db, "results"))
-  }, [db, user, adminRole])
-  const { data: results } = useCollection(resultsQuery)
+  }, [db, user])
+  const { data: results, isLoading: resultsLoading } = useCollection(resultsQuery)
 
   const usersQuery = useMemoFirebase(() => {
-    if (!user || !adminRole) return null
+    if (!user) return null
     return collection(db, "users")
-  }, [db, user, adminRole])
-  const { data: allUsers } = useCollection(usersQuery)
+  }, [db, user])
+  const { data: allUsers, isLoading: usersLoading } = useCollection(usersQuery)
 
   const handleLogout = async () => {
     await signOut(auth)
@@ -323,7 +324,7 @@ export default function AdminDashboard() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <Loader2 className="w-12 h-12 text-primary animate-spin" />
           <p className="text-sm font-medium animate-pulse">Establishing secure link...</p>
         </div>
       </div>
@@ -361,7 +362,7 @@ export default function AdminDashboard() {
           <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
             <ShieldCheck className="text-primary-foreground w-6 h-6" />
           </div>
-          {isSidebarOpen && <span className="font-bold text-lg tracking-tight">Admin Gate</span>}
+          {isSidebarOpen && <span className="font-bold text-lg tracking-tight text-foreground">Admin Gate</span>}
         </div>
 
         <nav className="flex-1 px-3 space-y-1">
@@ -417,16 +418,20 @@ export default function AdminDashboard() {
             <div className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {[
-                  { label: "Active Exams", value: exams?.length || 0, icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
-                  { label: "User Base", value: allUsers?.length || 0, icon: Users, color: "text-indigo-500", bg: "bg-indigo-500/10" },
-                  { label: "Total Attempts", value: results?.length || 0, icon: ShieldCheck, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-                  { label: "Integrity Alerts", value: results?.filter(r => r.integrityStatus === 'Flagged').length || 0, icon: ShieldAlert, color: "text-red-500", bg: "bg-red-500/10" },
+                  { label: "Active Exams", value: exams?.length, isLoading: examsLoading, icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
+                  { label: "User Base", value: allUsers?.length, isLoading: usersLoading, icon: Users, color: "text-indigo-500", bg: "bg-indigo-500/10" },
+                  { label: "Total Attempts", value: results?.length, isLoading: resultsLoading, icon: ShieldCheck, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+                  { label: "Integrity Alerts", value: results?.filter(r => r.integrityStatus === 'Flagged').length, isLoading: resultsLoading, icon: ShieldAlert, color: "text-red-500", bg: "bg-red-500/10" },
                 ].map((stat, i) => (
                   <Card key={i} className="reveal-up border-none shadow-sm">
                     <CardContent className="p-6 flex items-center justify-between">
                       <div className="space-y-1">
                         <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{stat.label}</p>
-                        <p className="text-3xl font-extrabold">{stat.value}</p>
+                        {stat.isLoading ? (
+                          <div className="h-8 w-12 bg-muted animate-pulse rounded" />
+                        ) : (
+                          <p className="text-3xl font-extrabold">{stat.value ?? 0}</p>
+                        )}
                       </div>
                       <div className={cn("p-4 rounded-2xl", stat.bg)}>
                         <stat.icon className={cn("w-6 h-6", stat.color)} />
@@ -490,32 +495,39 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-[300px]">
-                      <div className="grid grid-cols-1 gap-3">
-                        {exams?.map((exam) => (
-                          <div key={exam.id} className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border hover:border-primary/20 transition-all group">
-                            <div className="space-y-1">
-                              <p className="text-sm font-bold">{exam.title}</p>
-                              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">
-                                {exam.timeLimitMinutes}M • {exam.passingScore}% PASS SCORE
-                              </p>
+                      {examsLoading ? (
+                        <div className="flex flex-col items-center justify-center h-full gap-2">
+                          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Querying Vault...</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-3">
+                          {exams?.map((exam) => (
+                            <div key={exam.id} className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border hover:border-primary/20 transition-all group">
+                              <div className="space-y-1">
+                                <p className="text-sm font-bold">{exam.title}</p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">
+                                  {exam.timeLimitMinutes}M • {exam.passingScore}% PASS SCORE
+                                </p>
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                type="button"
+                                onClick={() => setActiveTab('exams')}
+                                className="group-hover:translate-x-1 transition-transform"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </Button>
                             </div>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              type="button"
-                              onClick={() => setActiveTab('exams')}
-                              className="group-hover:translate-x-1 transition-transform"
-                            >
-                              <ChevronRight className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        ))}
-                        {(!exams || exams.length === 0) && (
-                          <div className="text-center py-12 border border-dashed rounded-xl">
-                            <p className="text-xs text-muted-foreground">The assessment vault is currently empty.</p>
-                          </div>
-                        )}
-                      </div>
+                          ))}
+                          {(!exams || exams.length === 0) && (
+                            <div className="text-center py-12 border border-dashed rounded-xl">
+                              <p className="text-xs text-muted-foreground">The assessment vault is currently empty.</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </ScrollArea>
                   </CardContent>
                 </Card>
@@ -531,34 +543,49 @@ export default function AdminDashboard() {
                    <Plus className="w-4 h-4" /> New Exam
                  </Button>
                </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                 {exams?.map((exam) => (
-                   <Card key={exam.id} className="reveal-up group hover:border-primary transition-all overflow-hidden flex flex-col">
-                     <CardHeader>
-                       <div className="flex justify-between items-start">
-                         <div className="space-y-1">
-                           <CardTitle className="text-lg">{exam.title}</CardTitle>
-                           <CardDescription className="line-clamp-2 text-xs">{exam.description}</CardDescription>
+               {examsLoading ? (
+                 <div className="flex flex-col items-center justify-center py-24 gap-4">
+                   <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                   <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Accessing Secure Records...</p>
+                 </div>
+               ) : (
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                   {exams?.map((exam) => (
+                     <Card key={exam.id} className="reveal-up group hover:border-primary transition-all overflow-hidden flex flex-col">
+                       <CardHeader>
+                         <div className="flex justify-between items-start">
+                           <div className="space-y-1">
+                             <CardTitle className="text-lg">{exam.title}</CardTitle>
+                             <CardDescription className="line-clamp-2 text-xs">{exam.description}</CardDescription>
+                           </div>
+                           <Badge variant="secondary" className="shrink-0">{exam.timeLimitMinutes}m</Badge>
                          </div>
-                         <Badge variant="secondary" className="shrink-0">{exam.timeLimitMinutes}m</Badge>
-                       </div>
-                     </CardHeader>
-                     <div className="flex-1" />
-                     <CardContent className="flex items-center justify-between pt-0 bg-muted/20 py-4 mt-4">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Pass: {exam.passingScore}%</span>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          type="button"
-                          className="text-destructive hover:bg-destructive/10 gap-2 h-8 px-3" 
-                          onClick={() => setExamToDelete(exam.id)}
-                        >
-                          <Trash2 className="w-4 h-4" /> Delete
-                        </Button>
-                     </CardContent>
-                   </Card>
-                 ))}
-               </div>
+                       </CardHeader>
+                       <div className="flex-1" />
+                       <CardContent className="flex items-center justify-between pt-0 bg-muted/20 py-4 mt-4">
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Pass: {exam.passingScore}%</span>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            type="button"
+                            className="text-destructive hover:bg-destructive/10 gap-2 h-8 px-3" 
+                            onClick={() => setExamToDelete(exam.id)}
+                          >
+                            <Trash2 className="w-4 h-4" /> Delete
+                          </Button>
+                       </CardContent>
+                     </Card>
+                   ))}
+                   {(!exams || exams.length === 0) && (
+                     <div className="col-span-full flex flex-col items-center justify-center py-24 border-2 border-dashed rounded-2xl bg-muted/20">
+                       <FileText className="w-12 h-12 text-muted-foreground mb-4 opacity-20" />
+                       <h3 className="text-lg font-bold">Vault Empty</h3>
+                       <p className="text-sm text-muted-foreground">No assessments have been published yet.</p>
+                       <Button variant="outline" className="mt-6" onClick={() => setActiveTab('authoring')}>Create First Exam</Button>
+                     </div>
+                   )}
+                 </div>
+               )}
             </div>
           )}
 
@@ -780,42 +807,49 @@ export default function AdminDashboard() {
                    <CardDescription>Full audit of every identity in the system. Admins can update roles and profile information.</CardDescription>
                  </CardHeader>
                  <CardContent>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Username</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Role</TableHead>
-                          <TableHead>Identity ID</TableHead>
-                          <TableHead className="text-right">Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {allUsers?.map((u) => (
-                          <TableRow key={u.id} className="group">
-                            <TableCell className="font-bold">{u.username}</TableCell>
-                            <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                            <TableCell>
-                              <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="uppercase text-[9px]">
-                                {u.role}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-[10px] font-mono opacity-50">{u.id}</TableCell>
-                            <TableCell className="text-right">
-                               <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                type="button"
-                                className="gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={() => setEditingUser(u)}
-                              >
-                                <Edit2 className="w-3 h-3" /> Edit Profile
-                              </Button>
-                            </TableCell>
+                    {usersLoading ? (
+                      <div className="flex flex-col items-center justify-center py-12 gap-2">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-tighter">Decrypting Identities...</p>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Username</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Role</TableHead>
+                            <TableHead>Identity ID</TableHead>
+                            <TableHead className="text-right">Action</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {allUsers?.map((u) => (
+                            <TableRow key={u.id} className="group">
+                              <TableCell className="font-bold">{u.username}</TableCell>
+                              <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                              <TableCell>
+                                <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="uppercase text-[9px]">
+                                  {u.role}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-[10px] font-mono opacity-50">{u.id}</TableCell>
+                              <TableCell className="text-right">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  type="button"
+                                  className="gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => setEditingUser(u)}
+                                >
+                                  <Edit2 className="w-3 h-3" /> Edit Profile
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
                  </CardContent>
                </Card>
             </div>
@@ -828,34 +862,46 @@ export default function AdminDashboard() {
                 <CardDescription>Global tracking of every assessment attempt and its security status.</CardDescription>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Candidate</TableHead>
-                      <TableHead>Assessment</TableHead>
-                      <TableHead>Score</TableHead>
-                      <TableHead>Integrity</TableHead>
-                      <TableHead>Timestamp</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {results?.map((res) => (
-                      <TableRow key={res.id}>
-                        <TableCell className="text-xs font-medium">{res.studentEmail}</TableCell>
-                        <TableCell className="text-xs">{res.examTitle}</TableCell>
-                        <TableCell className="font-bold">{res.score || 0}%</TableCell>
-                        <TableCell>
-                           <Badge variant={res.integrityStatus === 'Clean' ? 'secondary' : 'destructive'} className="text-[10px]">
-                             {res.integrityStatus}
-                           </Badge>
-                        </TableCell>
-                        <TableCell className="text-[10px] text-muted-foreground">
-                          {res.completedAt ? new Date(res.completedAt.seconds * 1000).toLocaleString() : 'Active'}
-                        </TableCell>
+                {resultsLoading ? (
+                   <div className="flex flex-col items-center justify-center py-12 gap-2">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-tighter">Syncing Audit Logs...</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Candidate</TableHead>
+                        <TableHead>Assessment</TableHead>
+                        <TableHead>Score</TableHead>
+                        <TableHead>Integrity</TableHead>
+                        <TableHead>Timestamp</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {results?.map((res) => (
+                        <TableRow key={res.id}>
+                          <TableCell className="text-xs font-medium">{res.studentEmail}</TableCell>
+                          <TableCell className="text-xs">{res.examTitle}</TableCell>
+                          <TableCell className="font-bold">{res.score || 0}%</TableCell>
+                          <TableCell>
+                            <Badge variant={res.integrityStatus === 'Clean' ? 'secondary' : 'destructive'} className="text-[10px]">
+                              {res.integrityStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-[10px] text-muted-foreground">
+                            {res.completedAt ? new Date(res.completedAt.seconds * 1000).toLocaleString() : 'Active'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {(!results || results.length === 0) && (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No assessment attempts recorded.</TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           )}
