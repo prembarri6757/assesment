@@ -60,6 +60,13 @@ export default function AdminDashboard() {
   }, [db, user])
   const { data: results } = useCollection(resultsQuery)
 
+  // Fix: Move redirection to useEffect
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/')
+    }
+  }, [user, isUserLoading, router])
+
   const handleLogout = async () => {
     await signOut(auth)
     router.push('/')
@@ -134,13 +141,8 @@ export default function AdminDashboard() {
     }
   }
 
-  if (isUserLoading) {
+  if (isUserLoading || !user) {
     return <div className="min-h-screen flex items-center justify-center">Verifying credentials...</div>
-  }
-
-  if (!user) {
-    router.push('/')
-    return null
   }
 
   return (

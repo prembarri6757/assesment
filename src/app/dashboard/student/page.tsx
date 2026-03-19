@@ -1,6 +1,7 @@
 
 "use client"
 
+import { useEffect } from "react"
 import { useScrollReveal } from "@/hooks/use-scroll-reveal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
@@ -33,18 +34,20 @@ export default function StudentDashboard() {
   }, [db, user])
   const { data: results } = useCollection(resultsQuery)
 
+  // Fix: Move redirection to useEffect
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/')
+    }
+  }, [user, isUserLoading, router])
+
   const handleLogout = async () => {
     await signOut(auth)
     router.push('/')
   }
 
-  if (isUserLoading) {
+  if (isUserLoading || !user) {
     return <div className="min-h-screen flex items-center justify-center">Loading portal...</div>
-  }
-
-  if (!user) {
-    router.push('/')
-    return null
   }
 
   return (
