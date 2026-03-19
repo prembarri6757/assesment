@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -31,13 +30,11 @@ export default function AdminDashboard() {
   const { toast } = useToast()
   const router = useRouter()
   
-  // States for UI
   const [isGenerating, setIsGenerating] = useState(false)
   const [aiIdeas, setAiIdeas] = useState<GenerateQuestionIdeasOutput | null>(null)
   const [topic, setTopic] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
-  // Exam Form State
   const [newExam, setNewExam] = useState({
     title: "",
     description: "",
@@ -46,14 +43,12 @@ export default function AdminDashboard() {
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
 
-  // Step 1: Check if admin role document exists (crucial for security rules)
   const adminRoleRef = useMemoFirebase(() => {
     if (!user) return null
     return doc(db, "admin_roles", user.uid)
   }, [db, user])
   const { data: adminRole, isLoading: adminRoleLoading } = useDoc(adminRoleRef)
 
-  // Firestore Queries - Wait for auth AND verified admin role to prevent permission errors
   const examsQuery = useMemoFirebase(() => {
     if (!user || !adminRole) return null
     return collection(db, "exams")
@@ -62,17 +57,20 @@ export default function AdminDashboard() {
 
   const resultsQuery = useMemoFirebase(() => {
     if (!user || !adminRole) return null
-    // Collection Group query requires isAdmin() status verified by admin_roles document
     return query(collectionGroup(db, "results"))
   }, [db, user, adminRole])
   const { data: results } = useCollection(resultsQuery)
 
-  // Redirection handling
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push('/')
     }
-  }, [user, isUserLoading, router])
+    // Redirect if they are logged in but not an admin
+    if (!isUserLoading && !adminRoleLoading && user && !adminRole) {
+      toast({ title: "Access Denied", description: "This portal is for administrators only.", variant: "destructive" })
+      router.push('/dashboard/student')
+    }
+  }, [user, isUserLoading, adminRole, adminRoleLoading, router, toast])
 
   const handleLogout = async () => {
     await signOut(auth)
@@ -128,7 +126,6 @@ export default function AdminDashboard() {
         createdAt: serverTimestamp()
       })
 
-      // Save sub-collection questions
       for (const q of examQuestions) {
         const qId = doc(collection(db, `exams/${examId}/questions`)).id
         await setDoc(doc(db, `exams/${examId}/questions`, qId), {
@@ -153,7 +150,7 @@ export default function AdminDashboard() {
   }
 
   if (!user || !adminRole) {
-    return null // useEffect handles redirection
+    return null
   }
 
   return (
@@ -272,7 +269,6 @@ export default function AdminDashboard() {
           </Dialog>
         </header>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
             { label: "Active Exams", value: exams?.length || "0", icon: FileText, color: "text-blue-500" },

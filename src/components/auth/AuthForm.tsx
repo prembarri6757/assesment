@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react"
@@ -11,10 +10,10 @@ import { useRouter } from "next/navigation"
 import { useAuth, useFirestore } from "@/firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
-import { doc, setDoc, serverTimestamp } from "firebase/firestore"
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore"
 
 export function AuthForm() {
-  const [role, setRole] = useState<'student' | 'admin'>('student')
+  const [selectedRole, setSelectedRole] = useState<'student' | 'admin'>('student')
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -34,27 +33,38 @@ export function AuthForm() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
 
-        // 1. Create the base user profile in /users/{uid}
+        // 1. Create the base user profile
         await setDoc(doc(db, "users", user.uid), {
           id: user.uid,
           email: user.email,
-          role: role,
+          role: selectedRole,
           createdAt: serverTimestamp()
         })
 
-        // 2. If admin, create the special marker document in /admin_roles/{uid} for security rules
-        if (role === 'admin') {
+        // 2. If admin, create the special marker document
+        if (selectedRole === 'admin') {
           await setDoc(doc(db, "admin_roles", user.uid), {
             uid: user.uid,
             createdAt: serverTimestamp()
           })
         }
 
-        toast({ title: "Account created", description: "Welcome to the Secure Gateway." })
+        toast({ title: "Account created", description: `Welcome, ${selectedRole}.` })
+        router.push(`/dashboard/${selectedRole}`)
       } else {
-        await signInWithEmailAndPassword(auth, email, password)
+        const userCredential = await signInWithEmailAndPassword(auth, email, password)
+        const user = userCredential.user
+
+        // Fetch user document to find their actual role
+        const userDoc = await getDoc(doc(db, "users", user.uid))
+        if (userDoc.exists()) {
+          const userData = userDoc.data()
+          router.push(`/dashboard/${userData.role}`)
+        } else {
+          // Fallback if no doc exists (shouldn't happen with correct sign-up)
+          router.push(`/dashboard/${selectedRole}`)
+        }
       }
-      router.push(`/dashboard/${role}`)
     } catch (error: any) {
       toast({
         title: "Authentication Error",
@@ -81,15 +91,15 @@ export function AuthForm() {
         <div className="flex p-1 bg-muted rounded-lg mb-6">
           <button 
             type="button"
-            onClick={() => setRole('student')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${role === 'student' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}`}
+            onClick={() => setSelectedRole('student')}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${selectedRole === 'student' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}`}
           >
             Student
           </button>
           <button 
             type="button"
-            onClick={() => setRole('admin')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${role === 'admin' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}`}
+            onClick={() => setSelectedRole('admin')}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${selectedRole === 'admin' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}`}
           >
             Administrator
           </button>

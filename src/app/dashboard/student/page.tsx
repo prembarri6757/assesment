@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect } from "react"
@@ -8,10 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Badge } from "@/components/ui/badge"
 import { Clock, BookOpen, Trophy, ShieldCheck, ChevronRight, LogOut } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
-import { collection, query, where } from "firebase/firestore"
+import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
+import { collection, doc } from "firebase/firestore"
 import { useAuth } from "@/firebase"
 import { signOut } from "firebase/auth"
+import { useToast } from "@/hooks/use-toast"
 
 export default function StudentDashboard() {
   const containerRef = useScrollReveal()
@@ -19,8 +19,14 @@ export default function StudentDashboard() {
   const db = useFirestore()
   const auth = useAuth()
   const { user, isUserLoading } = useUser()
+  const { toast } = useToast()
 
-  // Queries - Memoized to prevent re-renders and wait for auth
+  const userDocRef = useMemoFirebase(() => {
+    if (!user) return null
+    return doc(db, "users", user.uid)
+  }, [db, user])
+  const { data: userProfile, isLoading: profileLoading } = useDoc(userDocRef)
+
   const examsQuery = useMemoFirebase(() => {
     if (!user) return null
     return collection(db, "exams")
@@ -29,24 +35,27 @@ export default function StudentDashboard() {
 
   const resultsQuery = useMemoFirebase(() => {
     if (!user) return null
-    // Results are stored at /users/{studentId}/results/{resultId}
     return collection(db, "users", user.uid, "results")
   }, [db, user])
   const { data: results } = useCollection(resultsQuery)
 
-  // Fix: Move redirection to useEffect
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push('/')
     }
-  }, [user, isUserLoading, router])
+    // Redirect if they are an admin trying to access the student portal
+    if (!isUserLoading && !profileLoading && userProfile && userProfile.role === 'admin') {
+      toast({ title: "Portal Redirect", description: "Directing you to the Administrator Dashboard." })
+      router.push('/dashboard/admin')
+    }
+  }, [user, isUserLoading, userProfile, profileLoading, router, toast])
 
   const handleLogout = async () => {
     await signOut(auth)
     router.push('/')
   }
 
-  if (isUserLoading || !user) {
+  if (isUserLoading || profileLoading || !user) {
     return <div className="min-h-screen flex items-center justify-center">Loading portal...</div>
   }
 
@@ -125,7 +134,7 @@ export default function StudentDashboard() {
                          <div>
                            <p className="font-medium text-sm">{res.examTitle}</p>
                            <p className="text-xs text-muted-foreground">
-                             Completed: {res.completedAt ? new Date(res.completedAt.seconds * 1000).toLocaleDateString() : 'Unknown'}
+                             Completed: {res.completedAt ? new Date(res.completedAt.seconds * 1000).toLocaleDateString() : 'Just now'}
                            </p>
                          </div>
                       </div>
