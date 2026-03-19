@@ -5,13 +5,26 @@ import { useScrollReveal } from "@/hooks/use-scroll-reveal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { MOCK_EXAMS, MOCK_RESULTS } from "@/lib/mock-data"
-import { Clock, BookOpen, Trophy, ShieldCheck, ChevronRight } from "lucide-react"
+import { Clock, BookOpen, Trophy, ShieldCheck, ChevronRight, History } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
+import { collection, query, where } from "firebase/firestore"
 
 export default function StudentDashboard() {
   const containerRef = useScrollReveal()
   const router = useRouter()
+  const db = useFirestore()
+  const { user } = useUser()
+
+  // Queries
+  const examsQuery = useMemoFirebase(() => collection(db, "exams"), [db])
+  const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
+
+  const resultsQuery = useMemoFirebase(() => {
+    if (!user) return null
+    return query(collection(db, "results"), where("studentId", "==", user.uid))
+  }, [db, user])
+  const { data: results } = useCollection(resultsQuery)
 
   return (
     <div ref={containerRef} className="min-h-screen bg-background">
@@ -25,8 +38,8 @@ export default function StudentDashboard() {
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold">John Doe</p>
-              <p className="text-[10px] text-muted-foreground">Student ID: 29482</p>
+              <p className="text-xs font-bold">{user?.email}</p>
+              <p className="text-[10px] text-muted-foreground">Secure ID: {user?.uid.slice(0, 8)}</p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => router.push('/')}>Logout</Button>
           </div>
@@ -35,19 +48,18 @@ export default function StudentDashboard() {
 
       <main className="container mx-auto p-4 sm:p-8 space-y-8">
         <header className="reveal-up space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">Welcome back, John</h1>
-          <p className="text-muted-foreground">You have 2 upcoming assessments this week.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Student Dashboard</h1>
+          <p className="text-muted-foreground">Select an assessment to begin or review your history.</p>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Feed */}
           <div className="lg:col-span-2 space-y-6">
             <section className="reveal-up space-y-4">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-primary" /> Available Assessments
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {MOCK_EXAMS.map((exam) => (
+                {exams?.map((exam) => (
                   <Card key={exam.id} className="group hover:border-primary transition-all duration-300">
                     <CardHeader>
                       <Badge className="w-fit mb-2 bg-primary/10 text-primary hover:bg-primary/20">{exam.timeLimitMinutes}m duration</Badge>
@@ -64,6 +76,11 @@ export default function StudentDashboard() {
                     </CardFooter>
                   </Card>
                 ))}
+                {(!exams || exams.length === 0) && !examsLoading && (
+                  <div className="col-span-full py-12 text-center border-2 border-dashed rounded-xl opacity-50">
+                    <p>No exams available at this moment.</p>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -72,7 +89,7 @@ export default function StudentDashboard() {
                 <Trophy className="w-5 h-5 text-accent" /> Recent Performance
               </h2>
               <div className="space-y-3">
-                {MOCK_RESULTS.map((res) => (
+                {results?.map((res) => (
                   <Card key={res.id} className="glass-card">
                     <CardContent className="p-4 flex items-center justify-between">
                       <div className="flex items-center gap-4">
@@ -81,23 +98,27 @@ export default function StudentDashboard() {
                          </div>
                          <div>
                            <p className="font-medium text-sm">{res.examTitle}</p>
-                           <p className="text-xs text-muted-foreground">Completed: {new Date(res.completedAt).toLocaleDateString()}</p>
+                           <p className="text-xs text-muted-foreground">Completed: {res.completedAt ? new Date(res.completedAt).toLocaleDateString() : 'Unknown'}</p>
                          </div>
                       </div>
                       <div className="text-right">
                         <p className={`text-lg font-bold ${res.score >= 70 ? 'text-emerald-600' : 'text-red-600'}`}>
                           {res.score}%
                         </p>
-                        <p className="text-[10px] uppercase tracking-wider font-bold opacity-50">Score</p>
+                        <Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'} className="text-[8px] uppercase">
+                          {res.integrityStatus}
+                        </Badge>
                       </div>
                     </CardContent>
                   </Card>
                 ))}
+                {(!results || results.length === 0) && (
+                   <p className="text-sm text-muted-foreground italic">No attempt history found.</p>
+                )}
               </div>
             </section>
           </div>
 
-          {/* Sidebar Info */}
           <div className="space-y-6">
             <Card className="reveal-up bg-primary text-primary-foreground">
               <CardHeader>
@@ -109,19 +130,19 @@ export default function StudentDashboard() {
                     <ShieldCheck className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="font-bold">Account Secure</p>
-                    <p className="text-xs opacity-80">Zero incidents flagged</p>
+                    <p className="font-bold">Verified Account</p>
+                    <p className="text-xs opacity-80">Security active</p>
                   </div>
                 </div>
                 <p className="text-xs opacity-70 leading-relaxed">
-                  Our system monitors your environment to ensure fair testing. Switching tabs or windows will terminate active exams.
+                  Our system monitors your environment to ensure fair testing. Loss of focus or tab switching is logged and reported.
                 </p>
               </CardContent>
             </Card>
 
             <Card className="reveal-up">
               <CardHeader>
-                <CardTitle className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Quick Checklist</CardTitle>
+                <CardTitle className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Session Checklist</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-4 text-sm">
@@ -135,7 +156,7 @@ export default function StudentDashboard() {
                   </li>
                   <li className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span>Webcam/Mic Enabled</span>
+                    <span>Do Not Disturb Mode On</span>
                   </li>
                 </ul>
               </CardContent>

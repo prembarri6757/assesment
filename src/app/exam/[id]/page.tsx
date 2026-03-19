@@ -8,43 +8,110 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, ShieldAlert, CheckCircle2 } from "lucide-react"
-import { MOCK_EXAMS, type Exam } from "@/lib/mock-data"
+import { AlertCircle, ShieldAlert, CheckCircle2, Lock } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
+import { useFirestore, useUser, useDoc, useCollection, useMemoFirebase } from "@/firebase"
+import { doc, setDoc, serverTimestamp, collection } from "firebase/firestore"
 
 export default function ExamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const [exam, setExam] = useState<Exam | null>(null)
+  const router = useRouter()
+  const { toast } = useToast()
+  const db = useFirestore()
+  const { user } = useUser()
+  const containerRef = useScrollReveal()
+
+  // Firestore Hooks
+  const examRef = useMemoFirebase(() => doc(db, "exams", id), [db, id])
+  const { data: exam } = useDoc(examRef)
+  
+  const questionsQuery = useMemoFirebase(() => collection(db, `exams/${id}/questions`), [db, id])
+  const { data: questions } = useCollection(questionsQuery)
+
+  // Local State
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0)
   const [answers, setAnswers] = useState<Record<string, number>>({})
   const [timeLeft, setTimeLeft] = useState(0)
   const [isFlagged, setIsFlagged] = useState(false)
   const [isFinished, setIsFinished] = useState(false)
   const [isStarted, setIsStarted] = useState(false)
-  
-  const router = useRouter()
-  const { toast } = useToast()
-  const containerRef = useScrollReveal()
+  const [resultId, setResultId] = useState<string | null>(null)
 
-  useEffect(() => {
-    const found = MOCK_EXAMS.find(e => e.id === id)
-    if (found) {
-      setExam(found)
-      setTimeLeft(found.timeLimitMinutes * 60)
+  // Initial Sync: Create Result document when started
+  const initializeExam = async () => {
+    if (!user || !exam) return
+    const newResultId = doc(collection(db, "results")).id
+    setResultId(newResultId)
+    
+    await setDoc(doc(db, "results", newResultId), {
+      id: newResultId,
+      studentId: user.uid,
+      studentEmail: user.email,
+      examId: exam.id,
+      examTitle: exam.title,
+      score: 0,
+      startedAt: serverTimestamp(),
+      integrityStatus: 'Clean',
+      answers: {}
+    })
+    
+    setIsStarted(true)
+    setTimeLeft(exam.timeLimitMinutes * 60)
+    
+    // Request Fullscreen
+    try {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen()
+      }
+    } catch (e) {
+      console.warn("Fullscreen request failed")
     }
-  }, [id])
+  }
 
-  const finishExam = useCallback(() => {
+  // Auto-Save Effect
+  useEffect(() => {
+    if (isStarted && !isFinished && resultId && Object.keys(answers).length > 0) {
+      const resultRef = doc(db, "results", resultId)
+      // Non-blocking update
+      setDoc(resultRef, { answers }, { merge: true })
+      // LocalStorage backup
+      localStorage.setItem(`exam_draft_${id}`, JSON.stringify(answers))
+    }
+  }, [answers, isStarted, isFinished, resultId, db, id])
+
+  const finishExam = useCallback(async () => {
+    if (isFinished || !resultId || !exam || !questions) return
     setIsFinished(true)
-    // In a real app, send result to Supabase via RPC here
-  }, [])
+
+    // Calculate score
+    let correctCount = 0
+    questions.forEach(q => {
+      if (answers[q.id] === q.correctOptionIndex) {
+        correctCount++
+      }
+    })
+    const finalScore = Math.round((correctCount / questions.length) * 100)
+
+    await setDoc(doc(db, "results", resultId), {
+      score: finalScore,
+      completedAt: serverTimestamp(),
+      integrityStatus: isFlagged ? 'Flagged' : 'Clean'
+    }, { merge: true })
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    }
+  }, [isFinished, resultId, exam, questions, answers, isFlagged, db])
 
   // Anti-Cheat: Tab switching detection
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && isStarted && !isFinished) {
         setIsFlagged(true)
+        if (resultId) {
+          setDoc(doc(db, "results", resultId), { integrityStatus: 'Flagged' }, { merge: true })
+        }
         toast({
           title: "SECURITY ALERT",
           description: "Unauthorized window switching detected. This session has been flagged.",
@@ -53,30 +120,22 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       }
     }
 
-    const disableShortcuts = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 'p' || e.key === 'u')) {
-        e.preventDefault()
-        return false
+    const handleFocusLoss = () => {
+      if (isStarted && !isFinished) {
+        setIsFlagged(true)
       }
-    }
-
-    const disableRightClick = (e: MouseEvent) => {
-      e.preventDefault()
-      return false
     }
 
     if (isStarted && !isFinished) {
       document.addEventListener("visibilitychange", handleVisibilityChange)
-      document.addEventListener("keydown", disableShortcuts)
-      document.addEventListener("contextmenu", disableRightClick)
+      window.addEventListener("blur", handleFocusLoss)
     }
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange)
-      document.removeEventListener("keydown", disableShortcuts)
-      document.removeEventListener("contextmenu", disableRightClick)
+      window.removeEventListener("blur", handleFocusLoss)
     }
-  }, [isStarted, isFinished, toast])
+  }, [isStarted, isFinished, resultId, db, toast])
 
   // Timer
   useEffect(() => {
@@ -100,14 +159,14 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   }
 
   const handleNext = () => {
-    if (exam && currentQuestionIdx < exam.questions.length - 1) {
+    if (questions && currentQuestionIdx < questions.length - 1) {
       setCurrentQuestionIdx(prev => prev + 1)
     } else {
       finishExam()
     }
   }
 
-  if (!exam) return <div>Loading assessment...</div>
+  if (!exam || !questions) return <div className="min-h-screen flex items-center justify-center">Loading assessment vault...</div>
 
   if (!isStarted) {
     return (
@@ -128,17 +187,17 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
               </div>
               <div className="p-4 border rounded-lg text-center bg-muted/30">
                 <p className="text-xs font-bold uppercase text-muted-foreground">Total Questions</p>
-                <p className="text-xl font-bold">{exam.questions.length}</p>
+                <p className="text-xl font-bold">{questions.length}</p>
               </div>
             </div>
             <div className="bg-destructive/10 p-4 rounded-lg border border-destructive/20 text-xs text-destructive flex gap-3">
               <AlertCircle className="w-5 h-5 shrink-0" />
-              <p>Warning: This exam is proctored. Switching tabs, opening developer tools, or resizing the window will result in an immediate integrity violation report.</p>
+              <p>Critical: This exam is proctored. Switching tabs or loss of focus will result in an immediate integrity violation report. Fullscreen mode will be requested.</p>
             </div>
           </CardContent>
           <CardFooter>
-            <Button onClick={() => setIsStarted(true)} className="w-full btn-premium py-6 text-lg">
-              Begin Assessment
+            <Button onClick={initializeExam} className="w-full btn-premium py-6 text-lg">
+              <Lock className="w-4 h-4 mr-2" /> Begin Secure Session
             </Button>
           </CardFooter>
         </Card>
@@ -154,23 +213,23 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             <div className="mx-auto w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4">
               <CheckCircle2 className="text-emerald-500 w-8 h-8" />
             </div>
-            <CardTitle className="text-2xl font-bold">Submission Received</CardTitle>
-            <p className="text-muted-foreground mt-2">Your results are being processed by the secure server.</p>
+            <CardTitle className="text-2xl font-bold">Session Finalized</CardTitle>
+            <p className="text-muted-foreground mt-2">Your results have been synced to the primary gateway.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <Alert variant={isFlagged ? "destructive" : "default"}>
               <ShieldAlert className="h-4 w-4" />
-              <AlertTitle>Integrity Status: {isFlagged ? 'Flagged' : 'Verified'}</AlertTitle>
+              <AlertTitle>Integrity Analysis: {isFlagged ? 'Flagged' : 'Verified'}</AlertTitle>
               <AlertDescription>
                 {isFlagged 
-                  ? "Unauthorized behavior was detected during your session. An administrator will review your logs."
-                  : "Session completed with a 100% integrity score. No violations detected."}
+                  ? "Unauthorized environment changes were detected. Your logs are under review."
+                  : "Session completed with a clean integrity status."}
               </AlertDescription>
             </Alert>
           </CardContent>
           <CardFooter>
             <Button onClick={() => router.push('/dashboard/student')} className="w-full">
-              Return to Student Portal
+              Return to Portal
             </Button>
           </CardFooter>
         </Card>
@@ -178,8 +237,8 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     )
   }
 
-  const currentQuestion = exam.questions[currentQuestionIdx]
-  const progress = ((currentQuestionIdx) / exam.questions.length) * 100
+  const currentQuestion = questions[currentQuestionIdx]
+  const progress = ((currentQuestionIdx) / questions.length) * 100
 
   return (
     <div ref={containerRef} className="min-h-screen bg-background select-none">
@@ -191,7 +250,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
              </div>
              <div className="hidden sm:block">
                <p className="font-bold text-sm leading-none">{exam.title}</p>
-               <p className="text-[10px] text-muted-foreground mt-1">Question {currentQuestionIdx + 1} of {exam.questions.length}</p>
+               <p className="text-[10px] text-muted-foreground mt-1">Question {currentQuestionIdx + 1} of {questions.length}</p>
              </div>
           </div>
           <div className={`px-4 py-2 rounded-lg font-mono text-xl border transition-all duration-500 ${timeLeft < 60 ? 'bg-destructive/10 border-destructive text-destructive pulse-warning' : 'bg-muted border-border'}`}>
@@ -210,7 +269,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-              {currentQuestion.options.map((option, idx) => (
+              {currentQuestion.options.map((option: string, idx: number) => (
                 <button
                   key={idx}
                   onClick={() => setAnswers({...answers, [currentQuestion.id]: idx})}
@@ -235,7 +294,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             </div>
           </CardContent>
           <CardFooter className="bg-muted/30 p-8 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">Draft autosaved to secure vault.</p>
+            <p className="text-xs text-muted-foreground italic">Draft synced to vault.</p>
             <div className="flex gap-4">
               <Button 
                 variant="outline" 
@@ -249,7 +308,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
                 disabled={answers[currentQuestion.id] === undefined}
                 className="btn-premium px-8"
               >
-                {currentQuestionIdx === exam.questions.length - 1 ? 'Finish Assessment' : 'Next Question'}
+                {currentQuestionIdx === questions.length - 1 ? 'Finish Assessment' : 'Next Question'}
               </Button>
             </div>
           </CardFooter>

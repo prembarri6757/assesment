@@ -6,18 +6,47 @@ import { useScrollReveal } from "@/hooks/use-scroll-reveal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, LayoutDashboard, FileText, Users, ShieldAlert, Sparkles, Search } from "lucide-react"
-import { MOCK_EXAMS, MOCK_RESULTS } from "@/lib/mock-data"
+import { Plus, LayoutDashboard, FileText, Users, ShieldAlert, Sparkles, Search, Trash2, Save } from "lucide-react"
+import { useFirestore, useCollection, useUser, useMemoFirebase } from "@/firebase"
+import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore"
 import { generateQuestionIdeas, type GenerateQuestionIdeasOutput } from "@/ai/flows/admin-question-idea-generator"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { useToast } from "@/hooks/use-toast"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 export default function AdminDashboard() {
   const containerRef = useScrollReveal()
+  const db = useFirestore()
+  const { user } = useUser()
+  const { toast } = useToast()
+  
+  // States for UI
   const [isGenerating, setIsGenerating] = useState(false)
   const [aiIdeas, setAiIdeas] = useState<GenerateQuestionIdeasOutput | null>(null)
   const [topic, setTopic] = useState("")
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+
+  // Exam Form State
+  const [newExam, setNewExam] = useState({
+    title: "",
+    description: "",
+    timeLimitMinutes: 30,
+    passingScore: 70
+  })
+  const [examQuestions, setExamQuestions] = useState<any[]>([])
+
+  // Firestore Queries
+  const examsQuery = useMemoFirebase(() => collection(db, "exams"), [db])
+  const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
+
+  const resultsQuery = useMemoFirebase(() => collection(db, "results"), [db]) // Note: Group query or separate collection needed for global view
+  const { data: results } = useCollection(resultsQuery)
 
   const handleGenerate = async () => {
     if (!topic) return
@@ -25,16 +54,71 @@ export default function AdminDashboard() {
     try {
       const ideas = await generateQuestionIdeas({ topic, difficultyLevel: 'medium' })
       setAiIdeas(ideas)
-    } catch (error) {
-      console.error(error)
+    } catch (error: any) {
+      toast({ title: "AI Generation Failed", description: error.message, variant: "destructive" })
     } finally {
       setIsGenerating(false)
     }
   }
 
+  const addQuestion = (q?: any) => {
+    setExamQuestions([...examQuestions, q || {
+      questionText: "",
+      options: ["", "", "", ""],
+      correctOptionIndex: 0
+    }])
+  }
+
+  const removeQuestion = (index: number) => {
+    setExamQuestions(examQuestions.filter((_, i) => i !== index))
+  }
+
+  const updateQuestion = (index: number, field: string, value: any) => {
+    const updated = [...examQuestions]
+    updated[index] = { ...updated[index], [field]: value }
+    setExamQuestions(updated)
+  }
+
+  const handleSaveExam = async () => {
+    if (!user) return
+    if (!newExam.title || examQuestions.length === 0) {
+      toast({ title: "Validation Error", description: "Please provide a title and at least one question.", variant: "destructive" })
+      return
+    }
+
+    const examId = doc(collection(db, "exams")).id
+    const examRef = doc(db, "exams", examId)
+
+    try {
+      await setDoc(examRef, {
+        ...newExam,
+        id: examId,
+        createdBy: user.uid,
+        createdAt: serverTimestamp()
+      })
+
+      // Save sub-collection questions
+      for (const q of examQuestions) {
+        const qId = doc(collection(db, `exams/${examId}/questions`)).id
+        await setDoc(doc(db, `exams/${examId}/questions`, qId), {
+          ...q,
+          id: qId,
+          examId,
+          examCreatedBy: user.uid
+        })
+      }
+
+      toast({ title: "Exam Created", description: "The assessment is now live." })
+      setIsCreateDialogOpen(false)
+      setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70 })
+      setExamQuestions([])
+    } catch (error: any) {
+      toast({ title: "Save Failed", description: error.message, variant: "destructive" })
+    }
+  }
+
   return (
     <div ref={containerRef} className="min-h-screen bg-background">
-      {/* Navigation */}
       <nav className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -44,7 +128,7 @@ export default function AdminDashboard() {
             <span className="font-bold text-xl hidden sm:inline-block">Admin Gateway</span>
           </div>
           <div className="flex items-center gap-4">
-            <Badge variant="outline" className="text-xs">v2.1 Premium</Badge>
+            <Badge variant="outline" className="text-xs">Live System</Badge>
             <Button variant="ghost" size="sm" onClick={() => window.location.href = '/'}>Logout</Button>
           </div>
         </div>
@@ -56,18 +140,104 @@ export default function AdminDashboard() {
             <h1 className="text-3xl font-bold tracking-tight">System Overview</h1>
             <p className="text-muted-foreground">Manage assessments and monitor integrity metrics.</p>
           </div>
-          <Button className="btn-premium flex items-center gap-2">
-            <Plus className="w-4 h-4" /> Create New Exam
-          </Button>
+          
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="btn-premium flex items-center gap-2">
+                <Plus className="w-4 h-4" /> Create New Exam
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Author New Examination</DialogTitle>
+                <DialogDescription>Define metadata and questions for the assessment.</DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-6 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Title</Label>
+                    <Input value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="Exam Title" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Time Limit (Minutes)</Label>
+                    <Input type="number" value={newExam.timeLimitMinutes} onChange={e => setNewExam({...newExam, timeLimitMinutes: parseInt(e.target.value)})} />
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <Label>Description</Label>
+                    <Textarea value={newExam.description} onChange={e => setNewExam({...newExam, description: e.target.value})} placeholder="Instructions for students" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Passing Score (%)</Label>
+                    <Input type="number" value={newExam.passingScore} onChange={e => setNewExam({...newExam, passingScore: parseInt(e.target.value)})} />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold">Questions ({examQuestions.length})</h3>
+                    <Button variant="outline" size="sm" onClick={() => addQuestion()}>
+                      <Plus className="w-4 h-4 mr-2" /> Add Question
+                    </Button>
+                  </div>
+                  
+                  {examQuestions.map((q, idx) => (
+                    <Card key={idx} className="p-4 space-y-4 border-l-4 border-l-primary">
+                      <div className="flex justify-between items-start">
+                        <Badge>Q{idx + 1}</Badge>
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => removeQuestion(idx)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <Input 
+                        placeholder="Question Prompt" 
+                        value={q.questionText} 
+                        onChange={e => updateQuestion(idx, 'questionText', e.target.value)} 
+                      />
+                      <div className="space-y-2">
+                        <Label className="text-xs uppercase">Options (Select correct one)</Label>
+                        <RadioGroup 
+                          value={q.correctOptionIndex.toString()} 
+                          onValueChange={v => updateQuestion(idx, 'correctOptionIndex', parseInt(v))}
+                        >
+                          {q.options.map((opt: string, oIdx: number) => (
+                            <div key={oIdx} className="flex items-center gap-2">
+                              <RadioGroupItem value={oIdx.toString()} />
+                              <Input 
+                                placeholder={`Option ${oIdx + 1}`} 
+                                value={opt} 
+                                onChange={e => {
+                                  const opts = [...q.options]
+                                  opts[oIdx] = e.target.value
+                                  updateQuestion(idx, 'options', opts)
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleSaveExam} className="btn-premium">
+                  <Save className="w-4 h-4 mr-2" /> Save & Publish
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </header>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
-            { label: "Active Exams", value: "12", icon: FileText, color: "text-blue-500" },
-            { label: "Total Students", value: "248", icon: Users, color: "text-indigo-500" },
+            { label: "Active Exams", value: exams?.length || "0", icon: FileText, color: "text-blue-500" },
+            { label: "Total Students", value: "...", icon: Users, color: "text-indigo-500" },
             { label: "Completion Rate", value: "94%", icon: LayoutDashboard, color: "text-emerald-500" },
-            { label: "Integrity Alerts", value: "3", icon: ShieldAlert, color: "text-red-500" },
+            { label: "Integrity Alerts", value: results?.filter(r => r.integrityStatus === 'Flagged').length || "0", icon: ShieldAlert, color: "text-red-500" },
           ].map((stat, i) => (
             <Card key={i} className="reveal-up glass-card">
               <CardContent className="p-6 flex items-center justify-between">
@@ -94,7 +264,7 @@ export default function AdminDashboard() {
 
           <TabsContent value="exams" className="space-y-4">
             <div className="grid grid-cols-1 gap-4">
-              {MOCK_EXAMS.map((exam) => (
+              {exams?.map((exam) => (
                 <Card key={exam.id} className="hover:border-primary/50 transition-colors group">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <div>
@@ -105,13 +275,18 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent className="flex items-center justify-between pt-0">
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>Questions: {exam.questions.length}</span>
                       <span>Pass: {exam.passingScore}%</span>
                     </div>
-                    <Button variant="ghost" size="sm" className="group-hover:text-primary">Edit Details</Button>
+                    <Button variant="ghost" size="sm" className="group-hover:text-destructive" onClick={() => deleteDoc(doc(db, "exams", exam.id))}>Delete</Button>
                   </CardContent>
                 </Card>
               ))}
+              {(!exams || exams.length === 0) && !examsLoading && (
+                <div className="text-center py-20 border-2 border-dashed rounded-xl opacity-50">
+                  <FileText className="w-12 h-12 mx-auto mb-4" />
+                  <p>No exams created yet. Start by clicking "Create New Exam".</p>
+                </div>
+              )}
             </div>
           </TabsContent>
 
@@ -163,7 +338,7 @@ export default function AdminDashboard() {
                                 </div>
                               ))}
                             </div>
-                            <Button variant="link" size="sm" className="p-0 h-auto text-xs">Add to current exam builder</Button>
+                            <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => addQuestion(q)}>Add to current exam builder</Button>
                           </CardContent>
                         </Card>
                       ))}
@@ -181,25 +356,37 @@ export default function AdminDashboard() {
                  <CardDescription>Real-time monitoring of active and completed sessions.</CardDescription>
                </CardHeader>
                <CardContent>
-                 <div className="space-y-4">
-                   {MOCK_RESULTS.map((res) => (
-                     <div key={res.id} className="flex items-center justify-between p-4 border rounded-lg">
-                       <div className="flex items-center gap-4">
-                         <div className={`w-2 h-10 rounded-full ${res.integrityStatus === 'Clean' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                         <div>
-                           <p className="font-semibold">{res.studentName}</p>
-                           <p className="text-xs text-muted-foreground">{res.examTitle}</p>
-                         </div>
-                       </div>
-                       <div className="text-right">
-                         <p className="font-bold">{res.score}/{res.totalQuestions*10}</p>
-                         <Badge variant={res.integrityStatus === 'Clean' ? 'secondary' : 'destructive'} className="text-[10px] h-4">
-                           {res.integrityStatus}
-                         </Badge>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
+                 <Table>
+                   <TableHeader>
+                     <TableRow>
+                       <TableHead>Student</TableHead>
+                       <TableHead>Assessment</TableHead>
+                       <TableHead>Score</TableHead>
+                       <TableHead>Status</TableHead>
+                       <TableHead>Completed At</TableHead>
+                     </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                     {results?.map((res) => (
+                       <TableRow key={res.id}>
+                         <TableCell className="font-medium">{res.studentEmail || res.studentId}</TableCell>
+                         <TableCell>{res.examTitle}</TableCell>
+                         <TableCell className="font-bold">{res.score}%</TableCell>
+                         <TableCell>
+                           <Badge variant={res.integrityStatus === 'Clean' ? 'secondary' : 'destructive'}>
+                             {res.integrityStatus}
+                           </Badge>
+                         </TableCell>
+                         <TableCell className="text-xs text-muted-foreground">
+                           {res.completedAt ? new Date(res.completedAt).toLocaleString() : 'Active...'}
+                         </TableCell>
+                       </TableRow>
+                     ))}
+                   </TableBody>
+                 </Table>
+                 {(!results || results.length === 0) && (
+                   <p className="text-center py-10 text-muted-foreground">No records found.</p>
+                 )}
                </CardContent>
              </Card>
           </TabsContent>
