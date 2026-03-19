@@ -12,7 +12,7 @@ import { AlertCircle, ShieldAlert, CheckCircle2, Lock } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { useFirestore, useUser, useDoc, useCollection, useMemoFirebase } from "@/firebase"
-import { doc, setDoc, serverTimestamp, collection, getDocs, writeBatch } from "firebase/firestore"
+import { doc, setDoc, serverTimestamp, collection } from "firebase/firestore"
 
 export default function ExamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -77,9 +77,6 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     if (isFinished || !resultId || !user) return
     setIsFinished(true)
 
-    // Note: grading logic is not performed here because the student cannot read the AnswerKey collection.
-    // In a production system, this would trigger a server-side grading process.
-    // For this prototype, we mark it as finalized and the Admin dashboard calculates the score.
     const resultRef = doc(db, "users", user.uid, "results", resultId)
     await setDoc(resultRef, {
       completedAt: serverTimestamp(),
@@ -148,7 +145,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   if (!isStarted) {
     return (
       <main className="min-h-screen flex items-center justify-center p-4 bg-background">
-        <Card className="max-w-xl w-full glass-card animate-in zoom-in-95 duration-500">
+        <Card className="max-w-xl w-full glass-card">
           <CardHeader className="text-center">
             <ShieldAlert className="mx-auto text-primary w-12 h-12 mb-4" />
             <CardTitle className="text-2xl font-bold">{exam.title}</CardTitle>
@@ -171,7 +168,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             </div>
           </CardContent>
           <CardFooter>
-            <Button onClick={initializeExam} className="w-full btn-premium py-6 text-lg">
+            <Button type="button" onClick={initializeExam} className="w-full btn-premium py-6 text-lg">
               <Lock className="w-4 h-4 mr-2" /> Start Secure Session
             </Button>
           </CardFooter>
@@ -183,7 +180,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   if (isFinished) {
     return (
       <main className="min-h-screen flex items-center justify-center p-4 bg-background">
-        <Card className="max-w-xl w-full glass-card animate-in slide-in-from-bottom duration-500">
+        <Card className="max-w-xl w-full glass-card">
           <CardHeader className="text-center">
             <CheckCircle2 className="mx-auto text-emerald-500 w-12 h-12 mb-4" />
             <CardTitle className="text-2xl font-bold">Session Finalized</CardTitle>
@@ -197,7 +194,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             </Alert>
           </CardContent>
           <CardFooter>
-            <Button onClick={() => router.push('/dashboard/student')} className="w-full">Return to Dashboard</Button>
+            <Button type="button" onClick={() => router.push('/dashboard/student')} className="w-full">Return to Dashboard</Button>
           </CardFooter>
         </Card>
       </main>
@@ -236,6 +233,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
               {currentQuestion.options.map((option: string, idx: number) => (
                 <button
                   key={idx}
+                  type="button"
                   onClick={() => setAnswers({...answers, [currentQuestion.id]: idx})}
                   className={`flex items-center gap-4 p-5 rounded-xl border text-left transition-all duration-200 group ${
                     answers[currentQuestion.id] === idx 
@@ -258,7 +256,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
           <CardFooter className="bg-muted/30 p-8 flex items-center justify-between">
             <p className="text-xs text-muted-foreground italic">Responses synced securely.</p>
             <div className="flex gap-4">
-              <Button onClick={handleNext} disabled={answers[currentQuestion.id] === undefined} className="btn-premium px-8">
+              <Button type="button" onClick={handleNext} disabled={answers[currentQuestion.id] === undefined} className="btn-premium px-8">
                 {currentQuestionIdx === questions.length - 1 ? 'Finalize' : 'Next'}
               </Button>
             </div>

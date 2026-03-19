@@ -110,7 +110,8 @@ export default function AdminDashboard() {
     router.push('/')
   }
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (e: React.MouseEvent) => {
+    e.preventDefault()
     if (!topic) return
     setIsGenerating(true)
     try {
@@ -125,7 +126,7 @@ export default function AdminDashboard() {
 
   const addQuestion = (q?: any) => {
     const formatted = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
       questionText: q?.questionText || "",
       options: q?.suggestedOptions || q?.options || ["", "", "", ""],
       correctOptionIndex: q?.correctOptionIndex || 0
@@ -141,7 +142,8 @@ export default function AdminDashboard() {
     setExamQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q))
   }
 
-  const handleSaveExam = () => {
+  const handleSaveExam = (e: React.MouseEvent) => {
+    e.preventDefault()
     if (!user) return
     if (!newExam.title || examQuestions.length === 0) {
       toast({ title: "Validation Error", description: "Exam must have a title and questions.", variant: "destructive" })
@@ -243,7 +245,9 @@ export default function AdminDashboard() {
     toast({ title: "User Promoted", description: "Administrative privileges granted." })
   }
 
-  if (isUserLoading || adminRoleLoading) {
+  // Stabilization: Only show full loading if we don't have user data yet.
+  // This prevents unmounting the entire dashboard when adminRole refreshes in background.
+  if (isUserLoading || (adminRoleLoading && !adminRole)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -281,6 +285,7 @@ export default function AdminDashboard() {
           {navItems.map((item) => (
             <button
               key={item.id}
+              type="button"
               onClick={() => setActiveTab(item.id)}
               className={cn(
                 "w-full flex items-center gap-3 p-3 rounded-xl transition-all group",
@@ -298,6 +303,7 @@ export default function AdminDashboard() {
         <div className="p-4 border-t">
           <Button 
             variant="ghost" 
+            type="button"
             className={cn("w-full justify-start gap-3", !isSidebarOpen && "px-2")}
             onClick={handleLogout}
           >
@@ -310,7 +316,7 @@ export default function AdminDashboard() {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 border-b flex items-center justify-between px-6 bg-card/50 backdrop-blur-sm sticky top-0 z-40">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="hidden md:flex">
+            <Button variant="ghost" size="icon" type="button" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="hidden md:flex">
               <Menu className="w-5 h-5" />
             </Button>
             <h2 className="font-bold text-lg capitalize">{activeTab.replace('-', ' ')}</h2>
@@ -324,7 +330,7 @@ export default function AdminDashboard() {
 
         <main className="flex-1 p-6 space-y-8 overflow-y-auto">
           {activeTab === 'overview' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {[
                   { label: "Active Exams", value: exams?.length || 0, icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
@@ -361,7 +367,7 @@ export default function AdminDashboard() {
                       onChange={(e) => setTopic(e.target.value)}
                       className="bg-background flex-1"
                     />
-                    <Button onClick={handleGenerate} disabled={isGenerating || !topic}>
+                    <Button type="button" onClick={handleGenerate} disabled={isGenerating || !topic}>
                       {isGenerating ? "Reasoning..." : "Generate Ideas"}
                     </Button>
                   </div>
@@ -371,10 +377,17 @@ export default function AdminDashboard() {
                         {aiIdeas.questions.map((q, idx) => (
                           <div key={idx} className="p-4 rounded-lg bg-muted border border-transparent hover:border-primary/20 transition-all group">
                             <p className="font-bold text-sm mb-2">{q.questionText}</p>
-                            <Button variant="link" className="h-auto p-0 text-xs text-primary" onClick={() => {
-                              setActiveTab("authoring")
-                              addQuestion(q)
-                            }}>Import to Builder <Plus className="ml-1 w-3 h-3" /></Button>
+                            <Button 
+                              variant="link" 
+                              type="button"
+                              className="h-auto p-0 text-xs text-primary" 
+                              onClick={() => {
+                                setActiveTab("authoring")
+                                addQuestion(q)
+                              }}
+                            >
+                              Import to Builder <Plus className="ml-1 w-3 h-3" />
+                            </Button>
                           </div>
                         ))}
                       </div>
@@ -386,10 +399,10 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'exams' && (
-            <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+            <div className="space-y-6">
                <div className="flex items-center justify-between">
                  <h2 className="text-2xl font-bold">Assessment Vault</h2>
-                 <Button onClick={() => setActiveTab('authoring')} className="gap-2">
+                 <Button type="button" onClick={() => setActiveTab('authoring')} className="gap-2">
                    <Plus className="w-4 h-4" /> New Exam
                  </Button>
                </div>
@@ -407,7 +420,13 @@ export default function AdminDashboard() {
                      </CardHeader>
                      <CardContent className="flex items-center justify-between pt-0">
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Pass: {exam.passingScore}%</span>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteDoc(doc(db, "exams", exam.id))}>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          type="button"
+                          className="text-destructive" 
+                          onClick={() => deleteDoc(doc(db, "exams", exam.id))}
+                        >
                           Archive
                         </Button>
                      </CardContent>
@@ -418,7 +437,7 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'authoring' && (
-            <div className="max-w-4xl mx-auto space-y-8 animate-in zoom-in-95 duration-500">
+            <div className="max-w-4xl mx-auto space-y-8">
                <div className="space-y-2">
                  <h2 className="text-3xl font-bold">Secure Builder</h2>
                  <p className="text-muted-foreground">Authoring content with separated question and answer key storage.</p>
@@ -450,17 +469,32 @@ export default function AdminDashboard() {
                <div className="space-y-4">
                  <div className="flex items-center justify-between">
                    <h3 className="text-xl font-bold">Question Blocks</h3>
-                   <Button variant="outline" size="sm" type="button" onClick={() => addQuestion()} className="gap-2">
+                   <Button 
+                    variant="outline" 
+                    size="sm" 
+                    type="button" 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      addQuestion();
+                    }} 
+                    className="gap-2"
+                  >
                      <Plus className="w-4 h-4" /> Append Question
                    </Button>
                  </div>
 
                  <div className="space-y-4">
                    {examQuestions.map((q, idx) => (
-                     <Card key={q.id} className="reveal-up border-l-4 border-l-primary animate-in slide-in-from-left-4 duration-300">
+                     <Card key={q.id} className="reveal-up border-l-4 border-l-primary">
                         <CardHeader className="flex flex-row items-center justify-between py-4">
                           <Badge variant="outline">Q{idx + 1}</Badge>
-                          <Button variant="ghost" size="sm" type="button" onClick={() => removeQuestion(q.id)} className="text-destructive h-8 w-8 p-0">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            type="button" 
+                            onClick={() => removeQuestion(q.id)} 
+                            className="text-destructive h-8 w-8 p-0"
+                          >
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </CardHeader>
@@ -501,7 +535,7 @@ export default function AdminDashboard() {
                </div>
 
                <div className="flex justify-end gap-4 pt-8">
-                 <Button className="px-10 py-6 text-lg btn-premium" onClick={handleSaveExam}>
+                 <Button type="button" className="px-10 py-6 text-lg btn-premium" onClick={handleSaveExam}>
                    <Save className="w-4 h-4 mr-2" /> Finalize & Publish
                  </Button>
                </div>
@@ -509,12 +543,12 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'students' && (
-            <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="space-y-8">
                <div className="flex items-center justify-between">
                  <h2 className="text-2xl font-bold">User Management</h2>
                  <Dialog>
                    <DialogTrigger asChild>
-                     <Button className="gap-2"><UserPlus className="w-4 h-4" /> Provision Student</Button>
+                     <Button type="button" className="gap-2"><UserPlus className="w-4 h-4" /> Provision Student</Button>
                    </DialogTrigger>
                    <DialogContent>
                      <DialogHeader>
@@ -567,7 +601,14 @@ export default function AdminDashboard() {
                             </TableCell>
                             <TableCell className="text-right">
                                {u.role !== 'admin' && (
-                                 <Button variant="outline" size="sm" onClick={() => handlePromote(u.id)}>Elevate to Admin</Button>
+                                 <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  type="button"
+                                  onClick={() => handlePromote(u.id)}
+                                >
+                                  Elevate to Admin
+                                </Button>
                                )}
                             </TableCell>
                           </TableRow>
@@ -580,7 +621,7 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'audit' && (
-            <Card className="border-none shadow-sm animate-in slide-in-from-top-4 duration-500">
+            <Card className="border-none shadow-sm">
               <CardHeader>
                 <CardTitle>Audit & Integrity History</CardTitle>
                 <CardDescription>Global tracking of every assessment attempt.</CardDescription>
