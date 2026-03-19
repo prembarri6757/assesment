@@ -64,7 +64,7 @@ export default function AdminDashboard() {
   const [isProvisioning, setIsProvisioning] = useState(false)
   const [newStudent, setNewStudent] = useState({ email: "", password: "", username: "" })
 
-  // Exam State
+  // Exam State (Persistent across renders)
   const [newExam, setNewExam] = useState({
     title: "",
     description: "",
@@ -126,7 +126,7 @@ export default function AdminDashboard() {
 
   const addQuestion = (q?: any) => {
     const formatted = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+      id: "q-" + Date.now().toString() + Math.random().toString(36).substr(2, 5),
       questionText: q?.questionText || "",
       options: q?.suggestedOptions || q?.options || ["", "", "", ""],
       correctOptionIndex: q?.correctOptionIndex || 0
@@ -245,20 +245,30 @@ export default function AdminDashboard() {
     toast({ title: "User Promoted", description: "Administrative privileges granted." })
   }
 
-  // Stabilization: Only show full loading if we don't have user data yet.
-  // This prevents unmounting the entire dashboard when adminRole refreshes in background.
-  if (isUserLoading || (adminRoleLoading && !adminRole)) {
+  // Optimized loading check: only show full-screen loader if user isn't confirmed yet.
+  if (isUserLoading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium animate-pulse">Synchronizing Secure Session...</p>
+          <p className="text-sm font-medium animate-pulse">Initial secure handshake...</p>
         </div>
       </div>
     )
   }
 
-  if (!user || !adminRole) return null
+  if (!user || (!adminRole && !adminRoleLoading)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="max-w-md text-center space-y-4">
+          <ShieldAlert className="w-16 h-16 text-destructive mx-auto" />
+          <h2 className="text-2xl font-bold">Access Denied</h2>
+          <p className="text-muted-foreground">This terminal requires validated administrator clearance markers.</p>
+          <Button onClick={() => router.push('/')}>Return Home</Button>
+        </div>
+      </div>
+    )
+  }
 
   const navItems = [
     { id: "overview", label: "Dashboard", icon: LayoutDashboard },
@@ -323,7 +333,7 @@ export default function AdminDashboard() {
           </div>
           <div className="flex items-center gap-4">
              <Badge variant="outline" className="text-[10px] uppercase tracking-widest bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-               System Live
+               {adminRoleLoading ? "Authenticating..." : "System Live"}
              </Badge>
           </div>
         </header>
@@ -382,8 +392,8 @@ export default function AdminDashboard() {
                               type="button"
                               className="h-auto p-0 text-xs text-primary" 
                               onClick={() => {
-                                setActiveTab("authoring")
                                 addQuestion(q)
+                                setActiveTab("authoring")
                               }}
                             >
                               Import to Builder <Plus className="ml-1 w-3 h-3" />
@@ -437,7 +447,7 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'authoring' && (
-            <div className="max-w-4xl mx-auto space-y-8">
+            <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                <div className="space-y-2">
                  <h2 className="text-3xl font-bold">Secure Builder</h2>
                  <p className="text-muted-foreground">Authoring content with separated question and answer key storage.</p>
@@ -485,7 +495,7 @@ export default function AdminDashboard() {
 
                  <div className="space-y-4">
                    {examQuestions.map((q, idx) => (
-                     <Card key={q.id} className="reveal-up border-l-4 border-l-primary">
+                     <Card key={q.id} className="border-l-4 border-l-primary animate-in zoom-in-95 duration-200">
                         <CardHeader className="flex flex-row items-center justify-between py-4">
                           <Badge variant="outline">Q{idx + 1}</Badge>
                           <Button 
@@ -534,7 +544,7 @@ export default function AdminDashboard() {
                  </div>
                </div>
 
-               <div className="flex justify-end gap-4 pt-8">
+               <div className="flex justify-end gap-4 pt-8 pb-20">
                  <Button type="button" className="px-10 py-6 text-lg btn-premium" onClick={handleSaveExam}>
                    <Save className="w-4 h-4 mr-2" /> Finalize & Publish
                  </Button>
