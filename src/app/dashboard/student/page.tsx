@@ -17,7 +17,9 @@ import {
   Target,
   History,
   TrendingUp,
-  FileText
+  FileText,
+  User,
+  AlertTriangle
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
@@ -104,26 +106,63 @@ export default function StudentDashboard() {
         </div>
       </nav>
 
-      <main className="container mx-auto p-4 md:p-8 space-y-8">
-        <header className="reveal-up space-y-2">
-          <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 px-3 py-1">
-            Active Student Profile
-          </Badge>
-          <h1 className="text-4xl font-extrabold tracking-tight">
-            Welcome back, <span className="text-primary">{userProfile?.username || "Scholar"}</span>
-          </h1>
-          <p className="text-muted-foreground text-lg max-w-2xl">
-            Access your secure assessments and monitor your academic integrity and performance.
-          </p>
+      <main className="container mx-auto p-4 md:p-8 space-y-12">
+        {/* Hero Section with Stats */}
+        <header className="reveal-up space-y-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="space-y-2">
+              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 px-3 py-1">
+                Identity Verified: {userProfile?.email}
+              </Badge>
+              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
+                Welcome back, <span className="text-primary">{userProfile?.username || "Scholar"}</span>
+              </h1>
+              <p className="text-muted-foreground text-lg max-w-2xl">
+                Your high-integrity academic workspace. Monitor your performance and access assigned assessments.
+              </p>
+            </div>
+            <div className="hidden lg:block">
+              <div className="bg-muted/50 p-4 rounded-3xl border border-dashed flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <User className="text-primary w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold">{userProfile?.username}</p>
+                  <p className="text-xs text-muted-foreground">Level 1 Student Account</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: "Assessments Taken", value: stats.totalTaken, icon: History, color: "text-blue-500", bg: "bg-blue-500/10" },
+              { label: "Aggregate Score", value: `${stats.avgScore}%`, icon: Target, color: "text-primary", bg: "bg-primary/10" },
+              { label: "Most Recent", value: `${stats.latestScore}%`, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+              { label: "Security Flags", value: stats.flags, icon: ShieldCheck, color: "text-red-500", bg: "bg-red-500/10" },
+            ].map((item, i) => (
+              <Card key={i} className="border-none shadow-sm rounded-2xl overflow-hidden bg-card/50 backdrop-blur-sm border-t border-white/10">
+                <CardContent className="p-6 flex items-center gap-4">
+                  <div className={cn("p-3 rounded-xl shrink-0", item.bg)}>
+                    <item.icon className={cn("w-6 h-6", item.color)} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black">{item.value}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{item.label}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </header>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           <TabsList className="bg-muted/50 p-1 rounded-2xl border w-full max-w-md h-auto grid grid-cols-2">
             <TabsTrigger value="exams" className="rounded-xl py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground shadow-sm">
-              <BookOpen className="w-4 h-4 mr-2" /> Assessments
+              <BookOpen className="w-4 h-4 mr-2" /> Available Tests
             </TabsTrigger>
-            <TabsTrigger value="stats" className="rounded-xl py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground shadow-sm">
-              <TrendingUp className="w-4 h-4 mr-2" /> My Performance
+            <TabsTrigger value="history" className="rounded-xl py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground shadow-sm">
+              <History className="w-4 h-4 mr-2" /> Session History
             </TabsTrigger>
           </TabsList>
 
@@ -133,9 +172,9 @@ export default function StudentDashboard() {
                 <section className="reveal-up space-y-6">
                   <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-bold flex items-center gap-2">
-                      <Target className="w-6 h-6 text-primary" /> Available Assessments
+                      <Target className="w-6 h-6 text-primary" /> Active Vaults
                     </h2>
-                    <Badge variant="secondary" className="px-4 py-1">{exams?.length || 0} Total</Badge>
+                    <Badge variant="secondary" className="px-4 py-1">{exams?.length || 0} Open</Badge>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -143,20 +182,20 @@ export default function StudentDashboard() {
                       [1,2].map(i => <div key={i} className="h-64 bg-muted animate-pulse rounded-2xl" />)
                     ) : (
                       exams?.map((exam) => (
-                        <Card key={exam.id} className="hover:border-primary transition-all shadow-lg border-none bg-card group overflow-hidden relative">
+                        <Card key={exam.id} className="hover:border-primary transition-all shadow-lg border-none bg-card group overflow-hidden relative rounded-3xl">
                           <div className="absolute top-0 right-0 p-4 opacity-5">
                             <FileText className="w-20 h-20" />
                           </div>
                           <CardHeader className="relative z-10">
                             <Badge variant="secondary" className="w-fit mb-4 bg-primary/10 text-primary border-none">
-                              <Clock className="w-3 h-3 mr-1" /> {exam.timeLimitMinutes}m Limit
+                              <Clock className="w-3 h-3 mr-1" /> {exam.timeLimitMinutes}m Window
                             </Badge>
                             <CardTitle className="text-2xl font-bold group-hover:text-primary transition-colors">{exam.title}</CardTitle>
                             <CardDescription className="line-clamp-2 mt-2 text-base">{exam.description}</CardDescription>
                           </CardHeader>
                           <CardFooter className="relative z-10 pt-4">
-                            <Button onClick={() => router.push(`/exam/${exam.id}`)} className="w-full btn-premium py-6 text-lg rounded-xl">
-                              Begin Session <ChevronRight className="w-5 h-5 ml-2" />
+                            <Button onClick={() => router.push(`/exam/${exam.id}`)} className="w-full btn-premium py-6 text-lg rounded-2xl">
+                              Initialize Session <ChevronRight className="w-5 h-5 ml-2" />
                             </Button>
                           </CardFooter>
                         </Card>
@@ -178,9 +217,9 @@ export default function StudentDashboard() {
                   <div className="absolute -top-10 -right-10 p-4 opacity-10 transition-transform group-hover:scale-110 rotate-12">
                     <ShieldCheck className="w-48 h-48" />
                   </div>
-                  <h3 className="font-bold text-2xl mb-4 relative z-10">Secure Mode</h3>
+                  <h3 className="font-bold text-2xl mb-4 relative z-10">Proctored Mode</h3>
                   <p className="text-lg opacity-90 relative z-10 leading-relaxed">
-                    Identity verification and focus tracking are active. Maintain focus on the assessment window to avoid system flags.
+                    Identity tracking is active. Ensure your environment is secure and maintain focus on the browser window to avoid automated integrity flags.
                   </p>
                 </Card>
 
@@ -195,10 +234,10 @@ export default function StudentDashboard() {
                       </div>
                     </li>
                     <li className="flex items-start gap-4">
-                      <div className="bg-primary/10 p-2 rounded-lg"><ShieldCheck className="w-5 h-5 text-primary" /></div>
+                      <div className="bg-primary/10 p-2 rounded-lg"><AlertTriangle className="w-5 h-5 text-primary" /></div>
                       <div>
-                        <p className="font-bold text-sm">Zero-Trust Protocol</p>
-                        <p className="text-xs text-muted-foreground">Keys are protected by server-side logic.</p>
+                        <p className="font-bold text-sm">Integrity Policy</p>
+                        <p className="text-xs text-muted-foreground">Window blur events are logged.</p>
                       </div>
                     </li>
                   </ul>
@@ -207,34 +246,13 @@ export default function StudentDashboard() {
             </div>
           </TabsContent>
 
-          <TabsContent value="stats" className="space-y-8 outline-none">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {[
-                { label: "Tests Taken", value: stats.totalTaken, icon: History, color: "text-blue-500", bg: "bg-blue-500/10" },
-                { label: "Average Score", value: `${stats.avgScore}%`, icon: Target, color: "text-primary", bg: "bg-primary/10" },
-                { label: "Latest Score", value: `${stats.latestScore}%`, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-                { label: "Integrity Flags", value: stats.flags, icon: ShieldCheck, color: "text-red-500", bg: "bg-red-500/10" },
-              ].map((item, i) => (
-                <Card key={i} className="border-none shadow-md rounded-3xl overflow-hidden">
-                  <CardContent className="p-8 flex flex-col items-center text-center gap-4">
-                    <div className={cn("p-4 rounded-2xl", item.bg)}>
-                      <item.icon className={cn("w-8 h-8", item.color)} />
-                    </div>
-                    <div>
-                      <p className="text-3xl font-black">{item.value}</p>
-                      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mt-1">{item.label}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
+          <TabsContent value="history" className="space-y-8 outline-none">
             <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-card">
               <CardHeader className="p-8 border-b">
                 <CardTitle className="text-xl font-bold flex items-center gap-2">
-                  <History className="w-5 h-5 text-primary" /> Detailed Performance History
+                  <History className="w-5 h-5 text-primary" /> Detailed Session Archive
                 </CardTitle>
-                <CardDescription>Comprehensive audit of your session records and integrity status.</CardDescription>
+                <CardDescription>A comprehensive audit of your completed assessments and security markers.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {resultsLoading ? (
@@ -249,18 +267,18 @@ export default function StudentDashboard() {
                             <Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'} className="text-[10px] px-3">
                               {res.integrityStatus}
                             </Badge>
-                            <span className="text-xs text-muted-foreground">ID: {res.id.slice(0,8)}</span>
+                            <span className="text-xs text-muted-foreground">Reference: {res.id.slice(0,8)}</span>
                           </div>
                         </div>
                         <div className="text-right">
                           <p className="text-4xl font-black text-primary">{res.score}%</p>
-                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mt-1">Calculated Score</p>
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mt-1">Final Score</p>
                         </div>
                       </div>
                     ))}
                     {(!results || results.length === 0) && (
                       <div className="p-20 text-center text-muted-foreground italic">
-                        No performance records found in your archive.
+                        Your academic archive is currently empty.
                       </div>
                     )}
                   </div>
