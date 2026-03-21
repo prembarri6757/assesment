@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState } from "react"
@@ -29,7 +28,6 @@ import { collection, doc } from "firebase/firestore"
 import { useAuth } from "@/firebase"
 import { signOut } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
-import { ModeToggle } from "@/components/mode-toggle"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 
@@ -111,7 +109,6 @@ export default function StudentDashboard() {
               <CircleUser className="w-4 h-4" />
               <span>{displayName}</span>
             </div>
-            <ModeToggle />
             <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-xl">
               <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Logout</span>
             </Button>

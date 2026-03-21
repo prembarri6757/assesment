@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -46,7 +45,6 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/firebase"
 import { signOut, createUserWithEmailAndPassword } from "firebase/auth"
 import { cn } from "@/lib/utils"
-import { ModeToggle } from "@/components/mode-toggle"
 import {
   Dialog,
   DialogContent,
@@ -64,14 +62,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+} from "@/AlertDialog"
 
 export default function AdminDashboard() {
   const containerRef = useScrollReveal()
@@ -459,7 +450,6 @@ export default function AdminDashboard() {
         </nav>
 
         <div className="p-4 border-t space-y-2">
-          <ModeToggle />
           <Button 
             variant="ghost" 
             className="w-full justify-start gap-3"
