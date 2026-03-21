@@ -92,6 +92,7 @@ export default function AdminDashboard() {
   const [newStudent, setNewStudent] = useState({ email: "", password: "", username: "", role: "student" as "student" | "admin" })
   const [editingUser, setEditingUser] = useState<any | null>(null)
   const [isGrading, setIsGrading] = useState<string | null>(null)
+  const [isGradingAll, setIsGradingAll] = useState(false)
 
   const [newExam, setNewExam] = useState({
     title: "",
@@ -173,6 +174,57 @@ export default function AdminDashboard() {
       toast({ title: "Grading Error", description: e.message, variant: "destructive" });
     } finally {
       setIsGrading(null);
+    }
+  };
+
+  const handleGradeAll = async () => {
+    if (!adminRole || !results || results.length === 0) return;
+    setIsGradingAll(true);
+    let successCount = 0;
+    try {
+      // Group results by examId to fetch answers only once per exam for efficiency
+      const resultsByExam: Record<string, any[]> = {};
+      results.forEach(res => {
+        if (!resultsByExam[res.examId]) resultsByExam[res.examId] = [];
+        resultsByExam[res.examId].push(res);
+      });
+
+      for (const examId in resultsByExam) {
+        // Fetch answer key once for this exam
+        const answersRef = collection(db, `exams/${examId}/answers`);
+        const answersSnap = await getDocs(answersRef);
+        const answerKey: Record<string, number> = {};
+        answersSnap.forEach(doc => {
+          answerKey[doc.id] = doc.data().correctOptionIndex;
+        });
+        const total = Object.keys(answerKey).length;
+
+        // Grade all results for this exam
+        for (const res of resultsByExam[examId]) {
+          let correct = 0;
+          if (res.responses) {
+            Object.entries(res.responses).forEach(([qId, selectedIdx]) => {
+              if (answerKey[qId] === selectedIdx) {
+                correct++;
+              }
+            });
+          }
+          const score = total > 0 ? Math.round((correct / total) * 100) : 0;
+          const resultRef = doc(db, "users", res.studentId, "results", res.id);
+          await updateDoc(resultRef, {
+            score,
+            correctCount: correct,
+            totalQuestions: total,
+            gradedAt: serverTimestamp()
+          });
+          successCount++;
+        }
+      }
+      toast({ title: "Bulk Grading Complete", description: `Successfully processed ${successCount} attempts.` });
+    } catch (e: any) {
+      toast({ title: "Bulk Grading Error", description: e.message, variant: "destructive" });
+    } finally {
+      setIsGradingAll(false);
     }
   };
 
@@ -738,9 +790,19 @@ export default function AdminDashboard() {
 
           {activeTab === 'audit' && (
             <div className="space-y-6">
-              <div className="space-y-1">
-                <h2 className="text-2xl font-bold">Audit Logs</h2>
-                <p className="text-muted-foreground text-sm">Detailed tracking of all exam attempts and integrity markers.</p>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-bold">Audit Logs</h2>
+                  <p className="text-muted-foreground text-sm">Detailed tracking of all exam attempts and integrity markers.</p>
+                </div>
+                <Button 
+                  onClick={handleGradeAll} 
+                  disabled={isGradingAll || !results || results.length === 0}
+                  className="gap-2"
+                >
+                  {isGradingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
+                  Grade All Results
+                </Button>
               </div>
               <Card className="border-none shadow-sm p-6">
                 {resultsLoading ? (
@@ -782,7 +844,7 @@ export default function AdminDashboard() {
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              disabled={isGrading === res.id}
+                              disabled={isGrading === res.id || isGradingAll}
                               onClick={() => handleGradeResult(res)}
                               className="gap-2"
                             >
