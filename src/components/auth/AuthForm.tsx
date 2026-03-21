@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,6 +12,8 @@ import { useAuth, useFirestore } from "@/firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore"
+import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 
 export function AuthForm() {
   const [selectedRole, setSelectedRole] = useState<'student' | 'admin'>('student')
@@ -25,6 +27,13 @@ export function AuthForm() {
   const auth = useAuth()
   const db = useFirestore()
   const { toast } = useToast()
+
+  // Ensure role is reset to student when switching to sign up
+  useEffect(() => {
+    if (isSignUp) {
+      setSelectedRole('student')
+    }
+  }, [isSignUp])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,35 +50,31 @@ export function AuthForm() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
 
+        // Administrator signup is disabled. All public signups default to student.
+        const finalizedRole = 'student'
+
         // 1. Create the base user profile with username
         await setDoc(doc(db, "users", user.uid), {
           id: user.uid,
           email: user.email,
           username: username,
-          role: selectedRole,
+          role: finalizedRole,
           createdAt: serverTimestamp()
         })
 
-        // 2. If admin, create the special marker document
-        if (selectedRole === 'admin') {
-          await setDoc(doc(db, "admin_roles", user.uid), {
-            uid: user.uid,
-            createdAt: serverTimestamp()
-          })
-        }
-
-        toast({ title: "Account created", description: `Welcome, ${username}.` })
-        router.push(`/dashboard/${selectedRole}`)
+        toast({ title: "Account created", description: `Welcome, ${username}. Access granted to student portal.` })
+        router.push(`/dashboard/${finalizedRole}`)
       } else {
         const userCredential = await signInWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
 
-        // Fetch user document to find their actual role and username
+        // Fetch user document to find their actual role and username for redirection
         const userDoc = await getDoc(doc(db, "users", user.uid))
         if (userDoc.exists()) {
           const userData = userDoc.data()
           router.push(`/dashboard/${userData.role}`)
         } else {
+          // Fallback if profile doesn't exist yet (should not happen in normal flow)
           router.push(`/dashboard/${selectedRole}`)
         }
       }
@@ -117,26 +122,44 @@ export function AuthForm() {
         </div>
         <CardTitle className="text-2xl font-bold tracking-tight">Secure Gateway</CardTitle>
         <CardDescription>
-          {isSignUp ? "Create a new account" : "Enter your credentials to access the portal"}
+          {isSignUp ? "Register for a secure student account" : "Enter credentials to access your dashboard"}
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Role Selection - Hidden during Sign Up as Admin registration is closed */}
         <div className="flex p-1 bg-muted rounded-lg mb-6">
           <button 
             type="button"
             onClick={() => setSelectedRole('student')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${selectedRole === 'student' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}`}
+            className={cn(
+              "flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all",
+              selectedRole === 'student' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground',
+              isSignUp && "w-full cursor-default"
+            )}
           >
-            Student
+            Student {isSignUp && "Registration"}
           </button>
-          <button 
-            type="button"
-            onClick={() => setSelectedRole('admin')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${selectedRole === 'admin' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'}`}
-          >
-            Administrator
-          </button>
+          {!isSignUp && (
+            <button 
+              type="button"
+              onClick={() => setSelectedRole('admin')}
+              className={cn(
+                "flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all",
+                selectedRole === 'admin' ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground'
+              )}
+            >
+              Administrator
+            </button>
+          )}
         </div>
+
+        {isSignUp && (
+          <div className="mb-4 text-center">
+            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+              Admin identities must be provisioned by the gateway
+            </p>
+          </div>
+        )}
 
         <form onSubmit={handleAuth} className="space-y-4">
           {isSignUp && (
@@ -148,7 +171,7 @@ export function AuthForm() {
                   id="username" 
                   type="text" 
                   placeholder="John Doe" 
-                  className="pl-10" 
+                  className="pl-10 h-12 rounded-xl" 
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required 
@@ -164,7 +187,7 @@ export function AuthForm() {
                 id="email" 
                 type="email" 
                 placeholder="name@organization.com" 
-                className="pl-10" 
+                className="pl-10 h-12 rounded-xl" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required 
@@ -191,25 +214,26 @@ export function AuthForm() {
               <Input 
                 id="password" 
                 type="password" 
-                className="pl-10" 
+                className="pl-10 h-12 rounded-xl" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required 
               />
             </div>
           </div>
-          <Button type="submit" className="w-full btn-premium py-6 text-lg" disabled={loading}>
-            {loading ? "Authenticating..." : isSignUp ? "Create Account" : "Login to Dashboard"}
+          <Button type="submit" className="w-full btn-premium py-7 text-lg rounded-2xl" disabled={loading}>
+            {loading ? "Verifying..." : isSignUp ? "Create Student Account" : "Access Secure Portal"}
           </Button>
         </form>
       </CardContent>
       <CardFooter className="flex flex-col space-y-4">
-        <Button variant="link" size="sm" onClick={() => setIsSignUp(!isSignUp)}>
-          {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
+        <Button variant="link" size="sm" onClick={() => setIsSignUp(!isSignUp)} className="text-muted-foreground hover:text-primary">
+          {isSignUp ? "Already have an identity? Sign In" : "Need a student account? Sign Up"}
         </Button>
-        <p className="text-xs text-center text-muted-foreground">
-          Zero-Trust Backend Protection Active
-        </p>
+        <div className="flex items-center gap-2 opacity-50 grayscale">
+          <Badge variant="outline" className="text-[10px] uppercase font-bold px-2 py-0 border-muted-foreground">Zero-Trust</Badge>
+          <Badge variant="outline" className="text-[10px] uppercase font-bold px-2 py-0 border-muted-foreground">Proctored</Badge>
+        </div>
       </CardFooter>
     </Card>
   )
