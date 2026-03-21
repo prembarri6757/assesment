@@ -49,7 +49,10 @@ export default function StudentDashboard() {
   }, [db, user])
   const { data: userProfile, isLoading: profileLoading } = useDoc(userDocRef)
 
-  const examsQuery = useMemoFirebase(() => collection(db, "exams"), [db])
+  const examsQuery = useMemoFirebase(() => {
+    if (!user) return null
+    return collection(db, "exams")
+  }, [db, user])
   const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
 
   const resultsQuery = useMemoFirebase(() => {
@@ -117,7 +120,6 @@ export default function StudentDashboard() {
       </nav>
 
       <main className="container mx-auto p-6 md:p-12 space-y-12">
-        {/* Personalized Welcome Hero - Removed reveal-up for instant visibility */}
         <header className="space-y-8 py-10">
           <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-700">
             <h1 className="text-5xl md:text-7xl font-extrabold tracking-tighter mb-4">
@@ -160,7 +162,7 @@ export default function StudentDashboard() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="exams" className="reveal-up space-y-8 outline-none">
+          <TabsContent value="exams" className="space-y-8 outline-none">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {examsLoading ? (
                 [1,2,3].map(i => <div key={i} className="h-64 bg-muted animate-pulse rounded-3xl" />)
@@ -194,7 +196,7 @@ export default function StudentDashboard() {
             </div>
           </TabsContent>
 
-          <TabsContent value="history" className="reveal-up space-y-8 outline-none">
+          <TabsContent value="history" className="space-y-8 outline-none">
             <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-card">
               <CardHeader className="p-10 border-b bg-muted/20">
                 <CardTitle className="text-2xl font-bold flex items-center gap-3">

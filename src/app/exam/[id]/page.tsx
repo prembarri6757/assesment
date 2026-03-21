@@ -22,11 +22,17 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const { user } = useUser()
   const containerRef = useScrollReveal()
 
-  // Firestore Hooks
-  const examRef = useMemoFirebase(() => doc(db, "exams", id), [db, id])
+  // Firestore Hooks - gated by user session
+  const examRef = useMemoFirebase(() => {
+    if (!user) return null
+    return doc(db, "exams", id)
+  }, [db, id, user])
   const { data: exam } = useDoc(examRef)
   
-  const questionsQuery = useMemoFirebase(() => collection(db, `exams/${id}/questions`), [db, id])
+  const questionsQuery = useMemoFirebase(() => {
+    if (!user) return null
+    return collection(db, `exams/${id}/questions`)
+  }, [db, id, user])
   const { data: questions } = useCollection(questionsQuery)
 
   // Local State
@@ -222,7 +228,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       </header>
 
       <main className="container mx-auto max-w-4xl p-4 sm:p-12">
-        <Card className="reveal-up glass-card shadow-2xl border-none">
+        <Card className="glass-card shadow-2xl border-none">
           <CardContent className="p-8 sm:p-12 space-y-8">
             <div className="space-y-2">
               <Badge variant="outline" className="uppercase tracking-widest text-[10px]">Active Question</Badge>

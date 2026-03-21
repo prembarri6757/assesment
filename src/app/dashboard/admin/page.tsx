@@ -110,13 +110,22 @@ export default function AdminDashboard() {
     }
   }, [user, isUserLoading, router])
 
-  const examsQuery = useMemoFirebase(() => collection(db, "exams"), [db])
+  const examsQuery = useMemoFirebase(() => {
+    if (!user) return null
+    return collection(db, "exams")
+  }, [db, user])
   const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
 
-  const resultsQuery = useMemoFirebase(() => query(collectionGroup(db, "results")), [db])
+  const resultsQuery = useMemoFirebase(() => {
+    if (!user) return null
+    return query(collectionGroup(db, "results"))
+  }, [db, user])
   const { data: results, isLoading: resultsLoading } = useCollection(resultsQuery)
 
-  const usersQuery = useMemoFirebase(() => collection(db, "users"), [db])
+  const usersQuery = useMemoFirebase(() => {
+    if (!user) return null
+    return collection(db, "users")
+  }, [db, user])
   const { data: allUsers, isLoading: usersLoading } = useCollection(usersQuery)
 
   const handleLogout = async () => {
