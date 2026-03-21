@@ -8,6 +8,7 @@ A high-integrity, multiple-choice examination platform built with Next.js 15, Fi
 - **AI-Powered**: Generate question ideas using Google Gemini 2.5 Flash.
 - **Dual Dashboards**: Dedicated experiences for Administrators and Students.
 - **Bulk Grading**: Administrator tool to grade all pending student results in one click.
+- **Restricted Admin Signup**: Admin accounts must be provisioned by an existing admin; public registration is student-only.
 
 ## GitHub Deployment
 
