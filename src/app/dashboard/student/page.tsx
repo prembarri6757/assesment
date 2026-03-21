@@ -20,7 +20,8 @@ import {
   FileText,
   User,
   AlertTriangle,
-  CircleUser
+  CircleUser,
+  Loader2
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
@@ -81,14 +82,18 @@ export default function StudentDashboard() {
     flags: results?.filter(r => r.integrityStatus === 'Flagged').length || 0
   }
 
-  if (isUserLoading || profileLoading || !user) {
+  if (isUserLoading || profileLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
-        <ShieldCheck className="w-12 h-12 text-primary animate-pulse" />
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
         <p className="text-muted-foreground font-medium">Verifying Session...</p>
       </div>
     )
   }
+
+  if (!user) return null;
+
+  const displayName = userProfile?.username || user.email?.split('@')[0] || "Scholar";
 
   return (
     <div ref={containerRef} className="min-h-screen bg-background">
@@ -99,9 +104,9 @@ export default function StudentDashboard() {
             <span className="font-bold text-xl tracking-tight hidden sm:inline">Student Gateway</span>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted border text-xs font-medium">
-              <CircleUser className="w-4 h-4 text-primary" />
-              <span>My profile</span>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/10 text-xs font-bold text-primary">
+              <CircleUser className="w-4 h-4" />
+              <span>{displayName}</span>
             </div>
             <ModeToggle />
             <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-xl">
@@ -112,18 +117,18 @@ export default function StudentDashboard() {
       </nav>
 
       <main className="container mx-auto p-6 md:p-12 space-y-12">
-        {/* Personalized Welcome Hero */}
-        <header className="reveal-up space-y-8 py-10">
-          <div className="max-w-4xl">
+        {/* Personalized Welcome Hero - Removed reveal-up for instant visibility */}
+        <header className="space-y-8 py-10">
+          <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-700">
             <h1 className="text-5xl md:text-7xl font-extrabold tracking-tighter mb-4">
-              Welcome, <span className="text-primary">{userProfile?.username || "Scholar"}</span>
+              Welcome, <span className="text-primary">{displayName}</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl leading-relaxed">
               You are currently authenticated in the secure assessment gateway. Your academic integrity standing is <span className="text-foreground font-bold">Verified</span>.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
             {[
               { label: "Assessments", value: stats.totalTaken, icon: History, color: "text-blue-500", bg: "bg-blue-500/10" },
               { label: "Aggregate", value: `${stats.avgScore}%`, icon: Target, color: "text-primary", bg: "bg-primary/10" },
@@ -179,7 +184,7 @@ export default function StudentDashboard() {
                   </Card>
                 ))
               )}
-              {exams?.length === 0 && !examsLoading && (
+              {(!exams || exams.length === 0) && !examsLoading && (
                 <Card className="col-span-full border-dashed border-2 p-20 flex flex-col items-center justify-center text-center bg-muted/20 rounded-[2.5rem]">
                   <BookOpen className="w-16 h-16 text-muted-foreground mb-4 opacity-20" />
                   <h3 className="text-2xl font-bold">No Active Assessments</h3>
@@ -199,7 +204,7 @@ export default function StudentDashboard() {
               </CardHeader>
               <CardContent className="p-0">
                 {resultsLoading ? (
-                  <div className="p-20 flex justify-center"><TrendingUp className="w-10 h-10 animate-spin text-primary opacity-20" /></div>
+                  <div className="p-20 flex justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>
                 ) : (
                   <div className="divide-y divide-border/50">
                     {results?.map((res) => (
