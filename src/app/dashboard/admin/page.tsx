@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -54,6 +55,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -62,7 +70,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/AlertDialog"
+} from "@/components/ui/alert-dialog"
 
 export default function AdminDashboard() {
   const containerRef = useScrollReveal()
@@ -173,7 +181,6 @@ export default function AdminDashboard() {
     setIsGradingAll(true);
     let successCount = 0;
     try {
-      // Group results by examId to fetch answers only once per exam for efficiency
       const resultsByExam: Record<string, any[]> = {};
       results.forEach(res => {
         if (!resultsByExam[res.examId]) resultsByExam[res.examId] = [];
@@ -181,7 +188,6 @@ export default function AdminDashboard() {
       });
 
       for (const examId in resultsByExam) {
-        // Fetch answer key once for this exam
         const answersRef = collection(db, `exams/${examId}/answers`);
         const answersSnap = await getDocs(answersRef);
         const answerKey: Record<string, number> = {};
@@ -190,7 +196,6 @@ export default function AdminDashboard() {
         });
         const total = Object.keys(answerKey).length;
 
-        // Grade all results for this exam
         for (const res of resultsByExam[examId]) {
           let correct = 0;
           if (res.responses) {
