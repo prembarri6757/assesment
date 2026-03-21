@@ -7,14 +7,27 @@ A high-integrity, multiple-choice examination platform built with Next.js 15, Fi
 - **Zero-Trust Architecture**: Answer keys are stored in restricted Firestore collections.
 - **AI-Powered**: Generate question ideas using Google Gemini 2.5 Flash.
 - **Dual Dashboards**: Dedicated experiences for Administrators and Students.
+- **Bulk Grading**: Administrator tool to grade all pending student results in one click.
+
+## GitHub Deployment
+
+To push this project to your repository, run these commands in your local terminal:
+
+```bash
+git init
+git remote add origin https://github.com/prembarri6757/assesment.git
+git add .
+git commit -m "Initial commit: Secure Assessment Gateway"
+git branch -M main
+git push -u origin main
+```
 
 ## Deployment to Vercel
 
-1. **Push your code** to a GitHub repository.
+1. **Push your code** to the GitHub repository using the steps above.
 2. **Import the project** in the [Vercel Dashboard](https://vercel.com/new).
 3. **Configure Environment Variables**:
-   - `GOOGLE_GENAI_API_KEY`: Your Google AI SDK key (for Genkit features).
-   - *Note*: Firebase Client SDK config is already in `src/firebase/config.ts`, so no extra client-side env vars are strictly required for the public keys.
+   - `GOOGLE_GENAI_API_KEY`: Your Google AI SDK key (for AI question generation).
 4. **Deploy**.
 
 ## Local Development
