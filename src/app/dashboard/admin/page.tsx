@@ -27,10 +27,12 @@ import {
   Edit2,
   Loader2,
   Settings,
-  Shield
+  Shield,
+  Calculator,
+  Target
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
-import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup } from "firebase/firestore"
+import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs, updateDoc } from "firebase/firestore"
 import { generateQuestionIdeas, type GenerateQuestionIdeasOutput } from "@/ai/flows/admin-question-idea-generator"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -89,6 +91,7 @@ export default function AdminDashboard() {
   const [isProvisioning, setIsProvisioning] = useState(false)
   const [newStudent, setNewStudent] = useState({ email: "", password: "", username: "", role: "student" as "student" | "admin" })
   const [editingUser, setEditingUser] = useState<any | null>(null)
+  const [isGrading, setIsGrading] = useState<string | null>(null)
 
   const [newExam, setNewExam] = useState({
     title: "",
@@ -133,6 +136,45 @@ export default function AdminDashboard() {
     await signOut(auth)
     router.push('/')
   }
+
+  const handleGradeResult = async (res: any) => {
+    if (!adminRole) return;
+    setIsGrading(res.id);
+    try {
+      const answersRef = collection(db, `exams/${res.examId}/answers`);
+      const answersSnap = await getDocs(answersRef);
+      const answerKey: Record<string, number> = {};
+      answersSnap.forEach(doc => {
+        answerKey[doc.id] = doc.data().correctOptionIndex;
+      });
+
+      let correct = 0;
+      const total = Object.keys(answerKey).length;
+      if (res.responses) {
+        Object.entries(res.responses).forEach(([qId, selectedIdx]) => {
+          if (answerKey[qId] === selectedIdx) {
+            correct++;
+          }
+        });
+      }
+
+      const score = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+      const resultRef = doc(db, "users", res.studentId, "results", res.id);
+      await updateDoc(resultRef, {
+        score,
+        correctCount: correct,
+        totalQuestions: total,
+        gradedAt: serverTimestamp()
+      });
+
+      toast({ title: "Grading Finalized", description: `Computed score: ${correct}/${total} (${score}%)` });
+    } catch (e: any) {
+      toast({ title: "Grading Error", description: e.message, variant: "destructive" });
+    } finally {
+      setIsGrading(null);
+    }
+  };
 
   const handleGenerate = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -709,8 +751,10 @@ export default function AdminDashboard() {
                       <TableRow>
                         <TableHead>Student Identity</TableHead>
                         <TableHead>Assessment Title</TableHead>
+                        <TableHead>Marks Gained</TableHead>
                         <TableHead>Calculated Score</TableHead>
                         <TableHead>Integrity Status</TableHead>
+                        <TableHead className="text-right">Grading</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -718,18 +762,39 @@ export default function AdminDashboard() {
                         <TableRow key={res.id}>
                           <TableCell className="font-medium">{res.studentEmail}</TableCell>
                           <TableCell>{res.examTitle}</TableCell>
-                          <TableCell className="font-bold text-primary">{res.score}%</TableCell>
+                          <TableCell className="font-mono">
+                            {res.correctCount !== undefined ? (
+                              <Badge variant="outline" className="gap-1 font-mono">
+                                <Target className="w-3 h-3" /> {res.correctCount} / {res.totalQuestions || 0}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground italic text-xs">Pending...</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-bold text-primary">{res.score || 0}%</TableCell>
                           <TableCell>
                             <Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'} className="gap-1">
                               {res.integrityStatus === 'Flagged' && <AlertTriangle className="w-3 h-3" />}
                               {res.integrityStatus}
                             </Badge>
                           </TableCell>
+                          <TableCell className="text-right">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              disabled={isGrading === res.id}
+                              onClick={() => handleGradeResult(res)}
+                              className="gap-2"
+                            >
+                              {isGrading === res.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Calculator className="w-3 h-3" />}
+                              Grade
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                       {(!results || results.length === 0) && (
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center py-20 text-muted-foreground">No attempts recorded in the audit logs.</TableCell>
+                          <TableCell colSpan={6} className="text-center py-20 text-muted-foreground">No attempts recorded in the audit logs.</TableCell>
                         </TableRow>
                       )}
                     </TableBody>

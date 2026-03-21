@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, ShieldAlert, CheckCircle2, Lock } from "lucide-react"
+import { AlertCircle, ShieldAlert, CheckCircle2, Lock, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { useFirestore, useUser, useDoc, useCollection, useMemoFirebase } from "@/firebase"
@@ -27,13 +27,13 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     if (!user) return null
     return doc(db, "exams", id)
   }, [db, id, user])
-  const { data: exam } = useDoc(examRef)
+  const { data: exam, isLoading: examLoading } = useDoc(examRef)
   
   const questionsQuery = useMemoFirebase(() => {
     if (!user) return null
     return collection(db, `exams/${id}/questions`)
   }, [db, id, user])
-  const { data: questions } = useCollection(questionsQuery)
+  const { data: questions, isLoading: questionsLoading } = useCollection(questionsQuery)
 
   // Local State
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0)
@@ -45,7 +45,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const [resultId, setResultId] = useState<string | null>(null)
 
   const initializeExam = async () => {
-    if (!user || !exam) return
+    if (!user || !exam || !questions) return
     const newResultId = doc(collection(db, "users", user.uid, "results")).id
     setResultId(newResultId)
     
@@ -58,6 +58,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       examTitle: exam.title,
       startedAt: serverTimestamp(),
       integrityStatus: 'Clean',
+      totalQuestions: questions.length,
       responses: {}
     })
     
@@ -146,7 +147,18 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     }
   }
 
-  if (!exam || !questions) return <div className="min-h-screen flex items-center justify-center">Loading vault...</div>
+  if (examLoading || questionsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
+          <p className="text-muted-foreground font-bold tracking-widest uppercase text-xs">Accessing Secure Vault...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!exam || !questions) return <div className="min-h-screen flex items-center justify-center">Assessment unavailable.</div>
 
   if (!isStarted) {
     return (
@@ -192,7 +204,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             <CardTitle className="text-2xl font-bold">Session Finalized</CardTitle>
             <p className="text-muted-foreground mt-2">Your responses have been synced to the vault. Grading will be performed by the primary gateway.</p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <Alert variant={isFlagged ? "destructive" : "default"}>
               <ShieldAlert className="h-4 w-4" />
               <AlertTitle>Status: {isFlagged ? 'Flagged' : 'Secure'}</AlertTitle>

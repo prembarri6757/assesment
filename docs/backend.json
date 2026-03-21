@@ -66,6 +66,8 @@
         "examId": { "type": "string" },
         "examTitle": { "type": "string" },
         "score": { "type": "number" },
+        "correctCount": { "type": "number" },
+        "totalQuestions": { "type": "number" },
         "startedAt": { "type": "string", "format": "date-time" },
         "completedAt": { "type": "string", "format": "date-time" },
         "integrityStatus": { "type": "string" },

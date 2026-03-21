@@ -121,7 +121,7 @@ export default function StudentDashboard() {
 
       <main className="container mx-auto p-6 md:p-12 space-y-12">
         <header className="space-y-8 py-10">
-          <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="max-w-4xl">
             <h1 className="text-5xl md:text-7xl font-extrabold tracking-tighter mb-4">
               Welcome, <span className="text-primary">{displayName}</span>
             </h1>
@@ -130,7 +130,7 @@ export default function StudentDashboard() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-8">
             {[
               { label: "Assessments", value: stats.totalTaken, icon: History, color: "text-blue-500", bg: "bg-blue-500/10" },
               { label: "Aggregate", value: `${stats.avgScore}%`, icon: Target, color: "text-primary", bg: "bg-primary/10" },
@@ -217,11 +217,16 @@ export default function StudentDashboard() {
                             <Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'} className="text-[10px] px-4 py-1 font-black uppercase tracking-widest rounded-full">
                               {res.integrityStatus}
                             </Badge>
+                            {res.correctCount !== undefined && (
+                              <Badge variant="secondary" className="text-[10px] px-4 py-1 font-black uppercase tracking-widest rounded-full gap-2">
+                                <Target className="w-3 h-3" /> Marks: {res.correctCount} / {res.totalQuestions || 0}
+                              </Badge>
+                            )}
                             <span className="text-xs text-muted-foreground font-mono">REF: {res.id.slice(0,10)}</span>
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-5xl font-black text-primary">{res.score}%</p>
+                          <p className="text-5xl font-black text-primary">{res.score || 0}%</p>
                           <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-2">Calculated Score</p>
                         </div>
                       </div>
