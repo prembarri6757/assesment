@@ -388,7 +388,7 @@ export default function AdminDashboard() {
                   { label: "Total Attempts", value: results?.length, icon: ShieldCheck, color: "text-emerald-500" },
                   { label: "Integrity Alerts", value: results?.filter(r => r.integrityStatus === 'Flagged').length, icon: ShieldAlert, color: "text-red-500" },
                 ].map((stat, i) => (
-                  <Card key={i} className="reveal-up border-none shadow-sm">
+                  <Card key={i} className="border-none shadow-sm">
                     <CardContent className="p-6 flex items-center justify-between">
                       <div className="space-y-1">
                         <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{stat.label}</p>
@@ -401,7 +401,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <Card className="reveal-up border-none shadow-sm">
+                <Card className="border-none shadow-sm">
                   <CardHeader>
                     <CardTitle className="text-lg">Content Idea Lab</CardTitle>
                     <CardDescription>Generate assessment patterns using AI.</CardDescription>
@@ -428,7 +428,7 @@ export default function AdminDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="reveal-up border-none shadow-sm">
+                <Card className="border-none shadow-sm">
                   <CardHeader>
                     <CardTitle className="text-lg">Recent Assessments</CardTitle>
                     <CardDescription>Direct access to published exam data.</CardDescription>
@@ -469,7 +469,7 @@ export default function AdminDashboard() {
                    <div className="col-span-full flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>
                  ) : (
                    exams?.map((exam) => (
-                     <Card key={exam.id} className="reveal-up hover:border-primary transition-all">
+                     <Card key={exam.id} className="hover:border-primary transition-all">
                        <CardHeader>
                          <CardTitle className="text-lg">{exam.title}</CardTitle>
                          <CardDescription className="line-clamp-2">{exam.description}</CardDescription>
@@ -494,7 +494,7 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'authoring' && (
-            <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="max-w-4xl mx-auto space-y-8">
                <div className="space-y-2">
                  <h2 className="text-3xl font-bold">Exam Builder</h2>
                  <p className="text-muted-foreground">Author secure multiple-choice assessments with AI assistance.</p>
@@ -524,35 +524,43 @@ export default function AdminDashboard() {
                <div className="space-y-4">
                  <div className="flex items-center justify-between">
                    <h3 className="text-xl font-bold">Questions</h3>
-                   <Button variant="outline" size="sm" onClick={() => addQuestion()} className="gap-2">
-                     <Plus className="w-4 h-4" /> Append Question
-                   </Button>
                  </div>
 
                  <div className="space-y-6 pb-24">
                    {examQuestions.map((q, idx) => (
-                     <Card key={q.id} className="border-l-4 border-l-primary shadow-sm">
-                        <CardHeader className="flex flex-row items-center justify-between py-4 bg-muted/30">
-                          <Badge>Question {idx + 1}</Badge>
-                          <Button variant="ghost" size="sm" onClick={() => removeQuestion(q.id)} className="text-destructive h-8 w-8 p-0">
-                            <Trash2 className="w-4 h-4" />
+                     <Card key={q.id} className="shadow-sm border-none overflow-hidden">
+                        <CardHeader className="flex flex-row items-center justify-between py-4 bg-muted/20">
+                          <Badge className="bg-primary hover:bg-primary/90 px-4 py-1 rounded-full text-sm font-medium">Question {idx + 1}</Badge>
+                          <Button variant="ghost" size="icon" onClick={() => removeQuestion(q.id)} className="text-destructive hover:bg-destructive/10">
+                            <Trash2 className="w-5 h-5" />
                           </Button>
                         </CardHeader>
-                        <CardContent className="space-y-6 pt-6">
-                          <div className="space-y-2">
-                            <Label>Question Text</Label>
-                            <Input value={q.questionText} onChange={e => updateQuestion(q.id, 'questionText', e.target.value)} />
+                        <CardContent className="space-y-6 pt-6 bg-card">
+                          <div className="space-y-3">
+                            <Label className="text-sm font-bold text-foreground/80 uppercase tracking-tight">Question Text</Label>
+                            <Input 
+                              value={q.questionText} 
+                              onChange={e => updateQuestion(q.id, 'questionText', e.target.value)}
+                              className="bg-muted/30 border-muted-foreground/20 rounded-xl h-12 focus:bg-background transition-all"
+                            />
                           </div>
 
                           <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                              <Label>Options</Label>
-                              <Badge variant="outline" className="text-[10px] uppercase font-bold text-muted-foreground">Select Correct</Badge>
+                            <div className="flex items-center justify-between border-b pb-2 mb-4">
+                              <Label className="text-sm font-bold text-foreground/80 uppercase tracking-tight">Options</Label>
+                              <Badge variant="outline" className="text-[10px] uppercase font-bold text-muted-foreground/60 border-muted-foreground/20 px-3 py-1">Select Correct</Badge>
                             </div>
-                            <RadioGroup value={q.correctOptionIndex.toString()} onValueChange={v => updateQuestion(q.id, 'correctOptionIndex', parseInt(v))} className="grid grid-cols-1 gap-2">
+                            <RadioGroup value={q.correctOptionIndex.toString()} onValueChange={v => updateQuestion(q.id, 'correctOptionIndex', parseInt(v))} className="grid grid-cols-1 gap-3">
                               {q.options.map((opt: string, oIdx: number) => (
-                                <div key={oIdx} className={cn("flex items-center gap-3 p-3 rounded-lg border transition-all", q.correctOptionIndex === oIdx ? "bg-emerald-500/5 border-emerald-500/50" : "hover:border-border/80")}>
-                                  <RadioGroupItem value={oIdx.toString()} id={`q${idx}-o${oIdx}`} />
+                                <div key={oIdx} className={cn(
+                                  "flex items-center gap-3 p-2 pr-4 rounded-xl border transition-all duration-300", 
+                                  q.correctOptionIndex === oIdx 
+                                    ? "bg-emerald-500/5 border-emerald-500/50 shadow-sm" 
+                                    : "bg-muted/10 border-transparent hover:border-muted-foreground/20"
+                                )}>
+                                  <div className="pl-3">
+                                    <RadioGroupItem value={oIdx.toString()} id={`q${idx}-o${oIdx}`} className="h-5 w-5" />
+                                  </div>
                                   <Input 
                                     value={opt} 
                                     onChange={e => {
@@ -560,20 +568,23 @@ export default function AdminDashboard() {
                                       opts[oIdx] = e.target.value
                                       updateQuestion(q.id, 'options', opts)
                                     }}
-                                    className="border-none shadow-none focus-visible:ring-0 p-0 h-auto"
+                                    className="border-none bg-transparent shadow-none focus-visible:ring-0 p-0 h-10 text-sm font-medium"
+                                    placeholder={`Option ${oIdx + 1}`}
                                   />
                                   <div className="flex items-center gap-2">
-                                    {q.correctOptionIndex === oIdx && <Badge variant="secondary" className="bg-emerald-500 text-white border-none text-[10px]">Correct</Badge>}
+                                    {q.correctOptionIndex === oIdx && <Badge className="bg-emerald-500 text-white border-none text-[10px] px-2 py-0.5 rounded-md">Correct</Badge>}
                                     {q.options.length > 2 && (
-                                      <Button variant="ghost" size="icon" onClick={() => removeOption(q.id, oIdx)} className="h-6 w-6">
-                                        <X className="w-3 h-3" />
+                                      <Button variant="ghost" size="icon" onClick={() => removeOption(q.id, oIdx)} className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                                        <X className="w-4 h-4" />
                                       </Button>
                                     )}
                                   </div>
                                 </div>
                               ))}
                             </RadioGroup>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => addOption(q.id)} disabled={q.options.length >= 5} className="text-xs">+ Add Distractor</Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => addOption(q.id)} disabled={q.options.length >= 5} className="text-xs font-bold text-primary/80 hover:bg-primary/5 mt-2">
+                              + Add Distractor
+                            </Button>
                           </div>
                         </CardContent>
                      </Card>
@@ -584,11 +595,16 @@ export default function AdminDashboard() {
                        <p className="text-muted-foreground">Start by appending a question or using the AI Idea Lab.</p>
                      </div>
                    )}
+                   <div className="flex justify-center pt-4">
+                     <Button variant="outline" onClick={() => addQuestion()} className="gap-2 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 px-8">
+                       <Plus className="w-4 h-4" /> Append Question
+                     </Button>
+                   </div>
                  </div>
                </div>
 
                <div className="fixed bottom-8 right-8 z-50">
-                 <Button className="px-10 py-6 text-lg shadow-2xl btn-premium" onClick={handleSaveExam}>
+                 <Button className="px-10 py-6 text-lg shadow-2xl btn-premium rounded-2xl" onClick={handleSaveExam}>
                    <Save className="w-4 h-4 mr-2" /> Publish Assessment
                  </Button>
                </div>
@@ -628,7 +644,7 @@ export default function AdminDashboard() {
                  </Dialog>
                </div>
 
-               <Card className="reveal-up border-none shadow-sm p-6">
+               <Card className="border-none shadow-sm p-6">
                  {usersLoading ? (
                    <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
                  ) : (
@@ -674,7 +690,7 @@ export default function AdminDashboard() {
                 <h2 className="text-2xl font-bold">Audit Logs</h2>
                 <p className="text-muted-foreground text-sm">Detailed tracking of all exam attempts and integrity markers.</p>
               </div>
-              <Card className="reveal-up border-none shadow-sm p-6">
+              <Card className="border-none shadow-sm p-6">
                 {resultsLoading ? (
                   <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
                 ) : (
