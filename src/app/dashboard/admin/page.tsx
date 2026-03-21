@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -113,7 +112,6 @@ export default function AdminDashboard() {
     }
   }, [user, isUserLoading, router])
 
-  // Gated queries: only run after user is authenticated AND admin clearance is verified
   const examsQuery = useMemoFirebase(() => {
     if (!user || !adminRole) return null
     return collection(db, "exams")
@@ -304,12 +302,6 @@ export default function AdminDashboard() {
       id: examId,
       createdBy: user.uid,
       createdAt: serverTimestamp()
-    }).catch(e => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: examRef.path,
-        operation: 'create',
-        requestResourceData: newExam
-      }))
     })
 
     examQuestions.forEach(q => {
@@ -582,12 +574,6 @@ export default function AdminDashboard() {
                      </Card>
                    ))
                  )}
-                 {(!exams || exams.length === 0) && !examsLoading && (
-                   <div className="col-span-full text-center py-20 bg-muted/30 rounded-2xl border-2 border-dashed">
-                      <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-20" />
-                      <p className="text-muted-foreground">No assessments published to the vault yet.</p>
-                   </div>
-                 )}
                </div>
             </div>
           )}
@@ -688,12 +674,6 @@ export default function AdminDashboard() {
                         </CardContent>
                      </Card>
                    ))}
-                   {examQuestions.length === 0 && (
-                     <div className="text-center py-12 border-2 border-dashed rounded-2xl bg-muted/30">
-                       <Sparkles className="w-10 h-10 text-primary/40 mx-auto mb-4" />
-                       <p className="text-muted-foreground">Start by appending a question or using the AI Idea Lab.</p>
-                     </div>
-                   )}
                    <div className="flex justify-center pt-4">
                      <Button variant="outline" onClick={() => addQuestion()} className="gap-2 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 px-8">
                        <Plus className="w-4 h-4" /> Append Question
@@ -849,11 +829,6 @@ export default function AdminDashboard() {
                           </TableCell>
                         </TableRow>
                       ))}
-                      {(!results || results.length === 0) && (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center py-20 text-muted-foreground">No attempts recorded in the audit logs.</TableCell>
-                        </TableRow>
-                      )}
                     </TableBody>
                   </Table>
                 )}
