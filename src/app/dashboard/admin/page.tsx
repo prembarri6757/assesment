@@ -25,7 +25,9 @@ import {
   X,
   AlertTriangle,
   Edit2,
-  Loader2
+  Loader2,
+  Settings,
+  Shield
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup } from "firebase/firestore"
@@ -413,9 +415,9 @@ export default function AdminDashboard() {
                       <ScrollArea className="h-64 rounded-xl border p-4">
                         <div className="space-y-4">
                           {aiIdeas.questions.map((q, idx) => (
-                            <div key={idx} className="p-4 rounded-lg bg-muted border group">
-                              <p className="font-bold text-sm mb-2">{q.questionText}</p>
-                              <Button variant="link" className="p-0 h-auto text-xs" onClick={() => { addQuestion(q); setActiveTab("authoring"); }}>
+                            <div key={idx} className="p-4 rounded-lg bg-muted border group flex items-center justify-between">
+                              <p className="font-bold text-sm">{q.questionText}</p>
+                              <Button variant="outline" size="sm" className="h-8" onClick={() => { addQuestion(q); setActiveTab("authoring"); }}>
                                 Import <Plus className="ml-1 w-3 h-3" />
                               </Button>
                             </div>
@@ -428,7 +430,8 @@ export default function AdminDashboard() {
 
                 <Card className="reveal-up border-none shadow-sm">
                   <CardHeader>
-                    <CardTitle className="text-lg">Published Assessments</CardTitle>
+                    <CardTitle className="text-lg">Recent Assessments</CardTitle>
+                    <CardDescription>Direct access to published exam data.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-[300px]">
@@ -438,11 +441,14 @@ export default function AdminDashboard() {
                         <div className="space-y-3">
                           {exams?.map((exam) => (
                             <div key={exam.id} className="flex items-center justify-between p-4 rounded-xl bg-muted border">
-                              <p className="text-sm font-bold">{exam.title}</p>
+                              <div className="space-y-0.5">
+                                <p className="text-sm font-bold">{exam.title}</p>
+                                <p className="text-[10px] text-muted-foreground uppercase">{exam.timeLimitMinutes} min limit</p>
+                              </div>
                               <Button variant="ghost" size="sm" onClick={() => setActiveTab('exams')}><ChevronRight className="w-4 h-4" /></Button>
                             </div>
                           ))}
-                          {exams?.length === 0 && <p className="text-center text-muted-foreground p-8">No assessments found.</p>}
+                          {(!exams || exams.length === 0) && <p className="text-center text-muted-foreground p-8">No assessments found.</p>}
                         </div>
                       )}
                     </ScrollArea>
@@ -477,6 +483,12 @@ export default function AdminDashboard() {
                      </Card>
                    ))
                  )}
+                 {(!exams || exams.length === 0) && !examsLoading && (
+                   <div className="col-span-full text-center py-20 bg-muted/30 rounded-2xl border-2 border-dashed">
+                      <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-20" />
+                      <p className="text-muted-foreground">No assessments published to the vault yet.</p>
+                   </div>
+                 )}
                </div>
             </div>
           )}
@@ -485,22 +497,22 @@ export default function AdminDashboard() {
             <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                <div className="space-y-2">
                  <h2 className="text-3xl font-bold">Exam Builder</h2>
-                 <p className="text-muted-foreground">Author secure multiple-choice assessments.</p>
+                 <p className="text-muted-foreground">Author secure multiple-choice assessments with AI assistance.</p>
                </div>
 
                <Card className="border-none shadow-sm p-8 space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label>Exam Title</Label>
-                      <Input value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="Title" />
+                      <Input value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="e.g. Cybersecurity Fundamentals" />
                     </div>
                     <div className="space-y-2">
                       <Label>Time Limit (Min)</Label>
                       <Input type="number" value={newExam.timeLimitMinutes} onChange={e => setNewExam({...newExam, timeLimitMinutes: parseInt(e.target.value) || 0})} />
                     </div>
                     <div className="space-y-2 md:col-span-2">
-                      <Label>Description</Label>
-                      <Textarea value={newExam.description} onChange={e => setNewExam({...newExam, description: e.target.value})} placeholder="Instructions..." />
+                      <Label>Instructions / Description</Label>
+                      <Textarea value={newExam.description} onChange={e => setNewExam({...newExam, description: e.target.value})} placeholder="Provide clear instructions for students..." />
                     </div>
                     <div className="space-y-2">
                       <Label>Passing Score (%)</Label>
@@ -519,7 +531,7 @@ export default function AdminDashboard() {
 
                  <div className="space-y-6 pb-24">
                    {examQuestions.map((q, idx) => (
-                     <Card key={q.id} className="border-l-4 border-l-primary shadow-sm animate-in fade-in slide-in-from-left-2">
+                     <Card key={q.id} className="border-l-4 border-l-primary shadow-sm">
                         <CardHeader className="flex flex-row items-center justify-between py-4 bg-muted/30">
                           <Badge>Question {idx + 1}</Badge>
                           <Button variant="ghost" size="sm" onClick={() => removeQuestion(q.id)} className="text-destructive h-8 w-8 p-0">
@@ -533,10 +545,13 @@ export default function AdminDashboard() {
                           </div>
 
                           <div className="space-y-4">
-                            <Label>Options (Mark Correct)</Label>
+                            <div className="flex items-center justify-between">
+                              <Label>Options</Label>
+                              <Badge variant="outline" className="text-[10px] uppercase font-bold text-muted-foreground">Select Correct</Badge>
+                            </div>
                             <RadioGroup value={q.correctOptionIndex.toString()} onValueChange={v => updateQuestion(q.id, 'correctOptionIndex', parseInt(v))} className="grid grid-cols-1 gap-2">
                               {q.options.map((opt: string, oIdx: number) => (
-                                <div key={oIdx} className={cn("flex items-center gap-3 p-3 rounded-lg border", q.correctOptionIndex === oIdx && "bg-emerald-500/5 border-emerald-500/50")}>
+                                <div key={oIdx} className={cn("flex items-center gap-3 p-3 rounded-lg border transition-all", q.correctOptionIndex === oIdx ? "bg-emerald-500/5 border-emerald-500/50" : "hover:border-border/80")}>
                                   <RadioGroupItem value={oIdx.toString()} id={`q${idx}-o${oIdx}`} />
                                   <Input 
                                     value={opt} 
@@ -548,7 +563,7 @@ export default function AdminDashboard() {
                                     className="border-none shadow-none focus-visible:ring-0 p-0 h-auto"
                                   />
                                   <div className="flex items-center gap-2">
-                                    {q.correctOptionIndex === oIdx && <Badge variant="outline" className="text-emerald-500 border-emerald-500/30 bg-emerald-500/5">Correct</Badge>}
+                                    {q.correctOptionIndex === oIdx && <Badge variant="secondary" className="bg-emerald-500 text-white border-none text-[10px]">Correct</Badge>}
                                     {q.options.length > 2 && (
                                       <Button variant="ghost" size="icon" onClick={() => removeOption(q.id, oIdx)} className="h-6 w-6">
                                         <X className="w-3 h-3" />
@@ -558,17 +573,23 @@ export default function AdminDashboard() {
                                 </div>
                               ))}
                             </RadioGroup>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => addOption(q.id)} disabled={q.options.length >= 5} className="text-xs">+ Add Option</Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => addOption(q.id)} disabled={q.options.length >= 5} className="text-xs">+ Add Distractor</Button>
                           </div>
                         </CardContent>
                      </Card>
                    ))}
+                   {examQuestions.length === 0 && (
+                     <div className="text-center py-12 border-2 border-dashed rounded-2xl bg-muted/30">
+                       <Sparkles className="w-10 h-10 text-primary/40 mx-auto mb-4" />
+                       <p className="text-muted-foreground">Start by appending a question or using the AI Idea Lab.</p>
+                     </div>
+                   )}
                  </div>
                </div>
 
                <div className="fixed bottom-8 right-8 z-50">
-                 <Button className="px-10 py-6 text-lg shadow-2xl" onClick={handleSaveExam}>
-                   <Save className="w-4 h-4 mr-2" /> Save Exam
+                 <Button className="px-10 py-6 text-lg shadow-2xl btn-premium" onClick={handleSaveExam}>
+                   <Save className="w-4 h-4 mr-2" /> Publish Assessment
                  </Button>
                </div>
             </div>
@@ -577,10 +598,13 @@ export default function AdminDashboard() {
           {activeTab === 'students' && (
             <div className="space-y-8">
                <div className="flex items-center justify-between">
-                 <h2 className="text-2xl font-bold">User Management</h2>
+                 <div className="space-y-1">
+                   <h2 className="text-2xl font-bold">System Roster</h2>
+                   <p className="text-muted-foreground text-sm">Audit and modify user identities across the gateway.</p>
+                 </div>
                  <Dialog>
                    <DialogTrigger asChild>
-                     <Button className="gap-2"><UserPlus className="w-4 h-4" /> Provision User</Button>
+                     <Button className="gap-2"><UserPlus className="w-4 h-4" /> Provision Identity</Button>
                    </DialogTrigger>
                    <DialogContent>
                      <DialogHeader>
@@ -589,16 +613,16 @@ export default function AdminDashboard() {
                      </DialogHeader>
                      <form onSubmit={handleProvisionUser} className="space-y-4 pt-4">
                         <Input required placeholder="Username" value={newStudent.username} onChange={e => setNewStudent({...newStudent, username: e.target.value})} />
-                        <Input required type="email" placeholder="Email" value={newStudent.email} onChange={e => setNewStudent({...newStudent, email: e.target.value})} />
-                        <Input required type="password" placeholder="Password" value={newStudent.password} onChange={e => setNewStudent({...newStudent, password: e.target.value})} />
+                        <Input required type="email" placeholder="Organization Email" value={newStudent.email} onChange={e => setNewStudent({...newStudent, email: e.target.value})} />
+                        <Input required type="password" placeholder="Temporary Password" value={newStudent.password} onChange={e => setNewStudent({...newStudent, password: e.target.value})} />
                         <Select value={newStudent.role} onValueChange={(v: any) => setNewStudent({...newStudent, role: v})}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder="Select Role" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="student">Student</SelectItem>
-                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="admin">Administrator</SelectItem>
                           </SelectContent>
                         </Select>
-                        <Button type="submit" className="w-full" disabled={isProvisioning}>{isProvisioning ? "Provisioning..." : "Create"}</Button>
+                        <Button type="submit" className="w-full" disabled={isProvisioning}>{isProvisioning ? "Provisioning..." : "Create Account"}</Button>
                      </form>
                    </DialogContent>
                  </Dialog>
@@ -611,20 +635,29 @@ export default function AdminDashboard() {
                    <Table>
                      <TableHeader>
                        <TableRow>
-                         <TableHead>Username</TableHead>
-                         <TableHead>Email</TableHead>
-                         <TableHead>Role</TableHead>
+                         <TableHead>Identity</TableHead>
+                         <TableHead>Email Address</TableHead>
+                         <TableHead>System Role</TableHead>
                          <TableHead className="text-right">Action</TableHead>
                        </TableRow>
                      </TableHeader>
                      <TableBody>
                        {allUsers?.map((u) => (
-                         <TableRow key={u.id}>
-                           <TableCell className="font-bold">{u.username}</TableCell>
+                         <TableRow key={u.id} className="group">
+                           <TableCell className="font-bold flex items-center gap-2">
+                             {u.username}
+                             {u.role === 'admin' && <Shield className="w-3 h-3 text-primary" />}
+                           </TableCell>
                            <TableCell>{u.email}</TableCell>
-                           <TableCell><Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>{u.role}</Badge></TableCell>
+                           <TableCell>
+                             <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="capitalize">
+                               {u.role}
+                             </Badge>
+                           </TableCell>
                            <TableCell className="text-right">
-                             <Button variant="ghost" size="sm" onClick={() => setEditingUser(u)}><Edit2 className="w-3 h-3" /></Button>
+                             <Button variant="ghost" size="sm" onClick={() => setEditingUser(u)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                               <Edit2 className="w-3 h-3" />
+                             </Button>
                            </TableCell>
                          </TableRow>
                        ))}
@@ -636,32 +669,48 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'audit' && (
-            <Card className="reveal-up border-none shadow-sm p-6">
-              {resultsLoading ? (
-                <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Student</TableHead>
-                      <TableHead>Exam</TableHead>
-                      <TableHead>Score</TableHead>
-                      <TableHead>Integrity</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {results?.map((res) => (
-                      <TableRow key={res.id}>
-                        <TableCell>{res.studentEmail}</TableCell>
-                        <TableCell>{res.examTitle}</TableCell>
-                        <TableCell className="font-bold">{res.score}%</TableCell>
-                        <TableCell><Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'}>{res.integrityStatus}</Badge></TableCell>
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <h2 className="text-2xl font-bold">Audit Logs</h2>
+                <p className="text-muted-foreground text-sm">Detailed tracking of all exam attempts and integrity markers.</p>
+              </div>
+              <Card className="reveal-up border-none shadow-sm p-6">
+                {resultsLoading ? (
+                  <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Student Identity</TableHead>
+                        <TableHead>Assessment Title</TableHead>
+                        <TableHead>Calculated Score</TableHead>
+                        <TableHead>Integrity Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {results?.map((res) => (
+                        <TableRow key={res.id}>
+                          <TableCell className="font-medium">{res.studentEmail}</TableCell>
+                          <TableCell>{res.examTitle}</TableCell>
+                          <TableCell className="font-bold text-primary">{res.score}%</TableCell>
+                          <TableCell>
+                            <Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'} className="gap-1">
+                              {res.integrityStatus === 'Flagged' && <AlertTriangle className="w-3 h-3" />}
+                              {res.integrityStatus}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {(!results || results.length === 0) && (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-20 text-muted-foreground">No attempts recorded in the audit logs.</TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
+              </Card>
+            </div>
           )}
         </main>
       </div>
@@ -669,13 +718,13 @@ export default function AdminDashboard() {
       <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit User Identity</DialogTitle>
-            <DialogDescription>Modify the system-level details for this roster identity.</DialogDescription>
+            <DialogTitle>Edit System Identity</DialogTitle>
+            <DialogDescription>Modify the system-level details and permissions for this user.</DialogDescription>
           </DialogHeader>
           {editingUser && (
             <form onSubmit={handleUpdateUser} className="space-y-4 pt-4">
               <div className="space-y-2">
-                <Label>Username</Label>
+                <Label>Username / Display Name</Label>
                 <Input value={editingUser.username} onChange={e => setEditingUser({...editingUser, username: e.target.value})} />
               </div>
               <div className="space-y-2">
@@ -684,7 +733,7 @@ export default function AdminDashboard() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="student">Student</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="admin">Administrator</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -700,8 +749,8 @@ export default function AdminDashboard() {
       <AlertDialog open={!!examToDelete} onOpenChange={(open) => !open && setExamToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Purge Assessment?</AlertDialogTitle>
-            <AlertDialogDescription>This action will permanently remove the assessment and all associated data from the secure vault.</AlertDialogDescription>
+            <AlertDialogTitle>Confirm Assessment Purge</AlertDialogTitle>
+            <AlertDialogDescription>This action will permanently remove the assessment and all associated metadata from the secure vault. This cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
