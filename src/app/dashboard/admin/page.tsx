@@ -110,22 +110,23 @@ export default function AdminDashboard() {
     }
   }, [user, isUserLoading, router])
 
+  // Gated queries: only run after user is authenticated AND admin clearance is verified
   const examsQuery = useMemoFirebase(() => {
-    if (!user) return null
+    if (!user || !adminRole) return null
     return collection(db, "exams")
-  }, [db, user])
+  }, [db, user, adminRole])
   const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
 
   const resultsQuery = useMemoFirebase(() => {
-    if (!user) return null
+    if (!user || !adminRole) return null
     return query(collectionGroup(db, "results"))
-  }, [db, user])
+  }, [db, user, adminRole])
   const { data: results, isLoading: resultsLoading } = useCollection(resultsQuery)
 
   const usersQuery = useMemoFirebase(() => {
-    if (!user) return null
+    if (!user || !adminRole) return null
     return collection(db, "users")
-  }, [db, user])
+  }, [db, user, adminRole])
   const { data: allUsers, isLoading: usersLoading } = useCollection(usersQuery)
 
   const handleLogout = async () => {
@@ -392,16 +393,16 @@ export default function AdminDashboard() {
             <div className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {[
-                  { label: "Active Exams", value: exams?.length, icon: FileText, color: "text-blue-500" },
-                  { label: "User Base", value: allUsers?.length, icon: Users, color: "text-indigo-500" },
-                  { label: "Total Attempts", value: results?.length, icon: ShieldCheck, color: "text-emerald-500" },
-                  { label: "Integrity Alerts", value: results?.filter(r => r.integrityStatus === 'Flagged').length, icon: ShieldAlert, color: "text-red-500" },
+                  { label: "Active Exams", value: exams?.length, icon: FileText, color: "text-blue-500", loading: examsLoading },
+                  { label: "User Base", value: allUsers?.length, icon: Users, color: "text-indigo-500", loading: usersLoading },
+                  { label: "Total Attempts", value: results?.length, icon: ShieldCheck, color: "text-emerald-500", loading: resultsLoading },
+                  { label: "Integrity Alerts", value: results?.filter(r => r.integrityStatus === 'Flagged').length, icon: ShieldAlert, color: "text-red-500", loading: resultsLoading },
                 ].map((stat, i) => (
                   <Card key={i} className="border-none shadow-sm">
                     <CardContent className="p-6 flex items-center justify-between">
                       <div className="space-y-1">
                         <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{stat.label}</p>
-                        <p className="text-3xl font-extrabold">{stat.value ?? 0}</p>
+                        {stat.loading ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /> : <p className="text-3xl font-extrabold">{stat.value ?? 0}</p>}
                       </div>
                       <stat.icon className={cn("w-8 h-8", stat.color)} />
                     </CardContent>
