@@ -28,10 +28,12 @@ import {
   Settings,
   Shield,
   Calculator,
-  Target
+  Target,
+  Search,
+  Filter
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
-import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs, updateDoc } from "firebase/firestore"
+import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs, updateDoc, writeBatch } from "firebase/firestore"
 import { generateQuestionIdeas, type GenerateQuestionIdeasOutput } from "@/ai/flows/admin-question-idea-generator"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -93,6 +95,9 @@ export default function AdminDashboard() {
   const [isGrading, setIsGrading] = useState<string | null>(null)
   const [isGradingAll, setIsGradingAll] = useState(false)
 
+  // Builder State
+  const [editingExamId, setEditingExamId] = useState<string | null>(null)
+  const [isLoadingExam, setIsLoadingExam] = useState(false)
   const [newExam, setNewExam] = useState({
     title: "",
     description: "",
@@ -100,6 +105,10 @@ export default function AdminDashboard() {
     passingScore: 70
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
+
+  // Filter State
+  const [userSearch, setUserSearch] = useState("")
+  const [roleFilter, setRoleFilter] = useState<string>("all")
 
   const adminRoleRef = useMemoFirebase(() => {
     if (!user) return null
@@ -134,6 +143,49 @@ export default function AdminDashboard() {
   const handleLogout = async () => {
     await signOut(auth)
     router.push('/')
+  }
+
+  const handleEditExam = async (examId: string) => {
+    setIsLoadingExam(true)
+    try {
+      const examToEdit = exams?.find(e => e.id === examId)
+      if (!examToEdit) throw new Error("Exam not found")
+
+      setNewExam({
+        title: examToEdit.title,
+        description: examToEdit.description,
+        timeLimitMinutes: examToEdit.timeLimitMinutes,
+        passingScore: examToEdit.passingScore
+      })
+
+      const publicQuestionsRef = collection(db, `exams/${examId}/questions`)
+      const privateAnswersRef = collection(db, `exams/${examId}/answers`)
+      
+      const [questionsSnap, answersSnap] = await Promise.all([
+        getDocs(publicQuestionsRef),
+        getDocs(privateAnswersRef)
+      ])
+
+      const answersMap: Record<string, number> = {}
+      answersSnap.forEach(doc => {
+        answersMap[doc.id] = doc.data().correctOptionIndex
+      })
+
+      const questions = questionsSnap.docs.map(doc => ({
+        id: doc.id,
+        questionText: doc.data().questionText,
+        options: doc.data().options,
+        correctOptionIndex: answersMap[doc.id] || 0
+      }))
+
+      setExamQuestions(questions)
+      setEditingExamId(examId)
+      setActiveTab("authoring")
+    } catch (e: any) {
+      toast({ title: "Edit Error", description: e.message, variant: "destructive" })
+    } finally {
+      setIsLoadingExam(false)
+    }
   }
 
   const handleGradeResult = async (res: any) => {
@@ -311,7 +363,6 @@ export default function AdminDashboard() {
       }));
     });
     
-    // Attempt to delete admin role too, it will simply fail or succeed based on existence
     deleteDoc(adminRef).catch(() => {});
 
     toast({ title: "Identity Purged", description: "The user has been removed from the roster." })
@@ -326,23 +377,25 @@ export default function AdminDashboard() {
       return
     }
 
-    const examId = doc(collection(db, "exams")).id
+    const examId = editingExamId || doc(collection(db, "exams")).id
     const examRef = doc(db, "exams", examId)
 
     setDoc(examRef, {
       ...newExam,
       id: examId,
       createdBy: user.uid,
-      createdAt: serverTimestamp()
-    }).catch(async (e) => {
+      updatedAt: serverTimestamp(),
+      ...(editingExamId ? {} : { createdAt: serverTimestamp() })
+    }, { merge: true }).catch(async (e) => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: examRef.path,
         operation: 'write'
       }));
     });
 
+    // Save questions and answers
     examQuestions.forEach(q => {
-      const qId = doc(collection(db, `exams/${examId}/questions`)).id
+      const qId = q.id.startsWith('q-') ? doc(collection(db, `exams/${examId}/questions`)).id : q.id
       const publicQRef = doc(db, `exams/${examId}/questions`, qId)
       const privateARef = doc(db, `exams/${examId}/answers`, qId)
 
@@ -351,7 +404,7 @@ export default function AdminDashboard() {
         examId,
         questionText: q.questionText,
         options: q.options
-      }).catch(async (e) => {
+      }, { merge: true }).catch(async (e) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: publicQRef.path,
           operation: 'write'
@@ -361,7 +414,7 @@ export default function AdminDashboard() {
       setDoc(privateARef, {
         id: qId,
         correctOptionIndex: q.correctOptionIndex
-      }).catch(async (e) => {
+      }, { merge: true }).catch(async (e) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: privateARef.path,
           operation: 'write'
@@ -369,9 +422,10 @@ export default function AdminDashboard() {
       });
     })
 
-    toast({ title: "Success", description: "Assessment published to the secure vault." })
+    toast({ title: "Success", description: editingExamId ? "Assessment updated." : "Assessment published." })
     setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70 })
     setExamQuestions([])
+    setEditingExamId(null)
     setActiveTab("exams")
   }
 
@@ -462,6 +516,13 @@ export default function AdminDashboard() {
     }
   }
 
+  const filteredUsers = allUsers?.filter(u => {
+    const matchesSearch = u.username?.toLowerCase().includes(userSearch.toLowerCase()) || 
+                          u.email?.toLowerCase().includes(userSearch.toLowerCase())
+    const matchesRole = roleFilter === "all" || u.role === roleFilter
+    return matchesSearch && matchesRole
+  })
+
   if (isUserLoading || adminRoleLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -506,7 +567,12 @@ export default function AdminDashboard() {
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                setActiveTab(item.id)
+                if (item.id !== 'authoring') {
+                  setEditingExamId(null)
+                }
+              }}
               className={cn(
                 "w-full flex items-center gap-3 p-3 rounded-xl transition-all",
                 activeTab === item.id 
@@ -627,23 +693,30 @@ export default function AdminDashboard() {
             <div className="space-y-6">
                <div className="flex items-center justify-between">
                  <h2 className="text-2xl font-bold">Assessment Vault</h2>
-                 <Button onClick={() => setActiveTab('authoring')} className="gap-2"><Plus className="w-4 h-4" /> New Exam</Button>
+                 <Button onClick={() => { setActiveTab('authoring'); setEditingExamId(null); setExamQuestions([]); setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70 }); }} className="gap-2">
+                   <Plus className="w-4 h-4" /> New Exam
+                 </Button>
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {examsLoading ? (
                    <div className="col-span-full flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>
                  ) : (
                    exams?.map((exam) => (
-                     <Card key={exam.id} className="hover:border-primary transition-all">
+                     <Card key={exam.id} className="hover:border-primary transition-all overflow-hidden flex flex-col">
                        <CardHeader>
                          <CardTitle className="text-lg">{exam.title}</CardTitle>
                          <CardDescription className="line-clamp-2">{exam.description}</CardDescription>
                        </CardHeader>
-                       <CardContent className="flex items-center justify-between bg-muted/20 py-4 mt-4">
+                       <CardContent className="flex items-center justify-between bg-muted/20 py-4 mt-auto">
                           <span className="text-xs font-bold text-muted-foreground uppercase">Pass: {exam.passingScore}%</span>
-                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setExamToDelete(exam.id)}>
-                            <Trash2 className="w-4 h-4" /> Delete
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => handleEditExam(exam.id)}>
+                              <Edit2 className="w-4 h-4" /> Edit
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setExamToDelete(exam.id)}>
+                              <Trash2 className="w-4 h-4" /> Delete
+                            </Button>
+                          </div>
                        </CardContent>
                      </Card>
                    ))
@@ -655,118 +728,130 @@ export default function AdminDashboard() {
           {activeTab === 'authoring' && (
             <div className="max-w-4xl mx-auto space-y-8">
                <div className="space-y-2">
-                 <h2 className="text-3xl font-bold">Exam Builder</h2>
+                 <h2 className="text-3xl font-bold">{editingExamId ? "Update Assessment" : "Exam Builder"}</h2>
                  <p className="text-muted-foreground">Author secure multiple-choice assessments with AI assistance.</p>
                </div>
 
-               <Card className="border-none shadow-sm p-8 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label>Exam Title</Label>
-                      <Input value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="e.g. Cybersecurity Fundamentals" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Time Limit (Min)</Label>
-                      <Input type="number" value={newExam.timeLimitMinutes} onChange={e => setNewExam({...newExam, timeLimitMinutes: parseInt(e.target.value) || 0})} />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Instructions / Description</Label>
-                      <Textarea value={newExam.description} onChange={e => setNewExam({...newExam, description: e.target.value})} placeholder="Provide clear instructions for students..." />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Passing Score (%)</Label>
-                      <Input type="number" value={newExam.passingScore} onChange={e => setNewExam({...newExam, passingScore: parseInt(e.target.value) || 0})} />
-                    </div>
-                  </div>
-               </Card>
-
-               <div className="space-y-4">
-                 <div className="flex items-center justify-between">
-                   <h3 className="text-xl font-bold">Questions</h3>
+               {isLoadingExam ? (
+                 <div className="flex flex-col items-center justify-center p-20 gap-4">
+                   <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                   <p className="text-muted-foreground font-bold">Loading secure assessment data...</p>
                  </div>
+               ) : (
+                 <>
+                   <Card className="border-none shadow-sm p-8 space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <Label>Exam Title</Label>
+                          <Input value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="e.g. Cybersecurity Fundamentals" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Time Limit (Min)</Label>
+                          <Input type="number" value={newExam.timeLimitMinutes} onChange={e => setNewExam({...newExam, timeLimitMinutes: parseInt(e.target.value) || 0})} />
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <Label>Instructions / Description</Label>
+                          <Textarea value={newExam.description} onChange={e => setNewExam({...newExam, description: e.target.value})} placeholder="Provide clear instructions for students..." />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Passing Score (%)</Label>
+                          <Input type="number" value={newExam.passingScore} onChange={e => setNewExam({...newExam, passingScore: parseInt(e.target.value) || 0})} />
+                        </div>
+                      </div>
+                   </Card>
 
-                 <div className="space-y-6 pb-24">
-                   {examQuestions.map((q, idx) => (
-                     <Card key={q.id} className="shadow-sm border-none overflow-hidden">
-                        <CardHeader className="flex flex-row items-center justify-between py-4 bg-muted/20">
-                          <Badge className="bg-primary hover:bg-primary/90 px-4 py-1 rounded-full text-sm font-medium">Question {idx + 1}</Badge>
-                          <Button variant="ghost" size="icon" onClick={() => removeQuestion(q.id)} className="text-destructive hover:bg-destructive/10">
-                            <Trash2 className="w-5 h-5" />
-                          </Button>
-                        </CardHeader>
-                        <CardContent className="space-y-6 pt-6 bg-card">
-                          <div className="space-y-3">
-                            <Label className="text-sm font-bold text-foreground/80 uppercase tracking-tight">Question Text</Label>
-                            <Input 
-                              value={q.questionText} 
-                              onChange={e => updateQuestion(q.id, 'questionText', e.target.value)}
-                              className="bg-muted/30 border-muted-foreground/20 rounded-xl h-12 focus:bg-background transition-all"
-                            />
-                          </div>
+                   <div className="space-y-4">
+                     <div className="flex items-center justify-between">
+                       <h3 className="text-xl font-bold">Questions</h3>
+                     </div>
 
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between border-b pb-2 mb-4">
-                              <Label className="text-sm font-bold text-foreground/80 uppercase tracking-tight">Options</Label>
-                              <Badge variant="outline" className="text-[10px] uppercase font-bold text-muted-foreground/60 border-muted-foreground/20 px-3 py-1">Select Correct</Badge>
-                            </div>
-                            <RadioGroup value={q.correctOptionIndex.toString()} onValueChange={v => updateQuestion(q.id, 'correctOptionIndex', parseInt(v))} className="grid grid-cols-1 gap-3">
-                              {q.options.map((opt: string, oIdx: number) => (
-                                <div key={oIdx} className={cn(
-                                  "flex items-center gap-3 p-2 pr-4 rounded-xl border transition-all duration-300", 
-                                  q.correctOptionIndex === oIdx 
-                                    ? "bg-emerald-500/5 border-emerald-500/50 shadow-sm" 
-                                    : "bg-muted/10 border-transparent hover:border-muted-foreground/20"
-                                )}>
-                                  <div className="pl-3">
-                                    <RadioGroupItem value={oIdx.toString()} id={`q${idx}-o${oIdx}`} className="h-5 w-5" />
-                                  </div>
-                                  <Input 
-                                    value={opt} 
-                                    onChange={e => {
-                                      const opts = [...q.options]
-                                      opts[oIdx] = e.target.value
-                                      updateQuestion(q.id, 'options', opts)
-                                    }}
-                                    className="border-none bg-transparent shadow-none focus-visible:ring-0 p-0 h-10 text-sm font-medium"
-                                    placeholder={`Option ${oIdx + 1}`}
-                                  />
-                                  <div className="flex items-center gap-2">
-                                    {q.correctOptionIndex === oIdx && <Badge className="bg-emerald-500 text-white border-none text-[10px] px-2 py-0.5 rounded-md">Correct</Badge>}
-                                    {q.options.length > 2 && (
-                                      <Button variant="ghost" size="icon" onClick={() => removeOption(q.id, oIdx)} className="h-7 w-7 text-muted-foreground hover:text-foreground">
-                                        <X className="w-4 h-4" />
-                                      </Button>
-                                    )}
-                                  </div>
+                     <div className="space-y-6 pb-24">
+                       {examQuestions.map((q, idx) => (
+                         <Card key={q.id} className="shadow-sm border-none overflow-hidden">
+                            <CardHeader className="flex flex-row items-center justify-between py-4 bg-muted/20">
+                              <Badge className="bg-primary hover:bg-primary/90 px-4 py-1 rounded-full text-sm font-medium">Question {idx + 1}</Badge>
+                              <Button variant="ghost" size="icon" onClick={() => removeQuestion(q.id)} className="text-destructive hover:bg-destructive/10">
+                                <Trash2 className="w-5 h-5" />
+                              </Button>
+                            </CardHeader>
+                            <CardContent className="space-y-6 pt-6 bg-card">
+                              <div className="space-y-3">
+                                <Label className="text-sm font-bold text-foreground/80 uppercase tracking-tight">Question Text</Label>
+                                <Input 
+                                  value={q.questionText} 
+                                  onChange={e => updateQuestion(q.id, 'questionText', e.target.value)}
+                                  className="bg-muted/30 border-muted-foreground/20 rounded-xl h-12 focus:bg-background transition-all"
+                                />
+                              </div>
+
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between border-b pb-2 mb-4">
+                                  <Label className="text-sm font-bold text-foreground/80 uppercase tracking-tight">Options</Label>
+                                  <Badge variant="outline" className="text-[10px] uppercase font-bold text-muted-foreground/60 border-muted-foreground/20 px-3 py-1">Select Correct</Badge>
                                 </div>
-                              ))}
-                            </RadioGroup>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => addOption(q.id)} disabled={q.options.length >= 5} className="text-xs font-bold text-primary/80 hover:bg-primary/5 mt-2">
-                              + Add Distractor
-                            </Button>
-                          </div>
-                        </CardContent>
-                     </Card>
-                   ))}
-                   <div className="flex justify-center pt-4">
-                     <Button variant="outline" onClick={() => addQuestion()} className="gap-2 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 px-8">
-                       <Plus className="w-4 h-4" /> Append Question
+                                <RadioGroup value={q.correctOptionIndex.toString()} onValueChange={v => updateQuestion(q.id, 'correctOptionIndex', parseInt(v))} className="grid grid-cols-1 gap-3">
+                                  {q.options.map((opt: string, oIdx: number) => (
+                                    <div key={oIdx} className={cn(
+                                      "flex items-center gap-3 p-2 pr-4 rounded-xl border transition-all duration-300", 
+                                      q.correctOptionIndex === oIdx 
+                                        ? "bg-emerald-500/5 border-emerald-500/50 shadow-sm" 
+                                        : "bg-muted/10 border-transparent hover:border-muted-foreground/20"
+                                    )}>
+                                      <div className="pl-3">
+                                        <RadioGroupItem value={oIdx.toString()} id={`q${idx}-o${oIdx}`} className="h-5 w-5" />
+                                      </div>
+                                      <Input 
+                                        value={opt} 
+                                        onChange={e => {
+                                          const opts = [...q.options]
+                                          opts[oIdx] = e.target.value
+                                          updateQuestion(q.id, 'options', opts)
+                                        }}
+                                        className="border-none bg-transparent shadow-none focus-visible:ring-0 p-0 h-10 text-sm font-medium"
+                                        placeholder={`Option ${oIdx + 1}`}
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        {q.correctOptionIndex === oIdx && <Badge className="bg-emerald-500 text-white border-none text-[10px] px-2 py-0.5 rounded-md">Correct</Badge>}
+                                        {q.options.length > 2 && (
+                                          <Button variant="ghost" size="icon" onClick={() => removeOption(q.id, oIdx)} className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                                            <X className="w-4 h-4" />
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </RadioGroup>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => addOption(q.id)} disabled={q.options.length >= 5} className="text-xs font-bold text-primary/80 hover:bg-primary/5 mt-2">
+                                  + Add Distractor
+                                </Button>
+                              </div>
+                            </CardContent>
+                         </Card>
+                       ))}
+                       <div className="flex justify-center pt-4">
+                         <Button variant="outline" onClick={() => addQuestion()} className="gap-2 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 px-8">
+                           <Plus className="w-4 h-4" /> Append Question
+                         </Button>
+                       </div>
+                     </div>
+                   </div>
+
+                   <div className="fixed bottom-8 right-8 z-50 flex gap-4">
+                     <Button variant="outline" onClick={() => setActiveTab('exams')} className="px-6 py-6 rounded-2xl">
+                       Discard Changes
+                     </Button>
+                     <Button className="px-10 py-6 text-lg shadow-2xl btn-premium rounded-2xl" onClick={handleSaveExam}>
+                       <Save className="w-4 h-4 mr-2" /> {editingExamId ? "Update Assessment" : "Publish Assessment"}
                      </Button>
                    </div>
-                 </div>
-               </div>
-
-               <div className="fixed bottom-8 right-8 z-50">
-                 <Button className="px-10 py-6 text-lg shadow-2xl btn-premium rounded-2xl" onClick={handleSaveExam}>
-                   <Save className="w-4 h-4 mr-2" /> Publish Assessment
-                 </Button>
-               </div>
+                 </>
+               )}
             </div>
           )}
 
           {activeTab === 'students' && (
             <div className="space-y-8">
-               <div className="flex items-center justify-between">
+               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                  <div className="space-y-1">
                    <h2 className="text-2xl font-bold">System Roster</h2>
                    <p className="text-muted-foreground text-sm">Audit and modify user identities across the gateway.</p>
@@ -797,7 +882,31 @@ export default function AdminDashboard() {
                  </Dialog>
                </div>
 
-               <Card className="border-none shadow-sm p-6">
+               <Card className="border-none shadow-sm overflow-hidden">
+                 <div className="p-4 border-b bg-muted/20 flex flex-col md:flex-row gap-4 items-center">
+                    <div className="relative flex-1 w-full">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input 
+                        placeholder="Search by name or email..." 
+                        className="pl-10" 
+                        value={userSearch} 
+                        onChange={(e) => setUserSearch(e.target.value)} 
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                      <Filter className="w-4 h-4 text-muted-foreground" />
+                      <Select value={roleFilter} onValueChange={setRoleFilter}>
+                        <SelectTrigger className="w-full md:w-[150px]">
+                          <SelectValue placeholder="Filter Role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Roles</SelectItem>
+                          <SelectItem value="student">Student</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                 </div>
                  {usersLoading ? (
                    <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
                  ) : (
@@ -811,7 +920,7 @@ export default function AdminDashboard() {
                        </TableRow>
                      </TableHeader>
                      <TableBody>
-                       {allUsers?.map((u) => (
+                       {filteredUsers?.map((u) => (
                          <TableRow key={u.id} className="group">
                            <TableCell className="font-bold flex items-center gap-2">
                              {u.username}
@@ -835,6 +944,13 @@ export default function AdminDashboard() {
                            </TableCell>
                          </TableRow>
                        ))}
+                       {filteredUsers?.length === 0 && (
+                         <TableRow>
+                           <TableCell colSpan={4} className="text-center py-10 text-muted-foreground italic">
+                             No identities match your criteria.
+                           </TableCell>
+                         </TableRow>
+                       )}
                      </TableBody>
                    </Table>
                  )}
