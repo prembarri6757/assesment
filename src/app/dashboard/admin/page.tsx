@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -30,7 +31,8 @@ import {
   Calculator,
   Target,
   Search,
-  Filter
+  Filter,
+  Send
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs, updateDoc, writeBatch } from "firebase/firestore"
@@ -102,7 +104,8 @@ export default function AdminDashboard() {
     title: "",
     description: "",
     timeLimitMinutes: 30,
-    passingScore: 70
+    passingScore: 70,
+    status: "draft" as "draft" | "published"
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
 
@@ -160,7 +163,8 @@ export default function AdminDashboard() {
         title: examToEdit.title,
         description: examToEdit.description,
         timeLimitMinutes: examToEdit.timeLimitMinutes,
-        passingScore: examToEdit.passingScore
+        passingScore: examToEdit.passingScore,
+        status: examToEdit.status || "draft"
       })
 
       const publicQuestionsRef = collection(db, `exams/${examId}/questions`)
@@ -374,7 +378,7 @@ export default function AdminDashboard() {
     setUserToDelete(null)
   }
 
-  const handleSaveExam = (e: React.MouseEvent) => {
+  const handleSaveExam = (e: React.MouseEvent, status: "draft" | "published") => {
     e.preventDefault()
     if (!user) return
     if (!newExam.title || examQuestions.length === 0) {
@@ -388,6 +392,7 @@ export default function AdminDashboard() {
     setDoc(examRef, {
       ...newExam,
       id: examId,
+      status: status,
       createdBy: user.uid,
       updatedAt: serverTimestamp(),
       ...(editingExamId ? {} : { createdAt: serverTimestamp() })
@@ -427,8 +432,8 @@ export default function AdminDashboard() {
       });
     })
 
-    toast({ title: "Success", description: editingExamId ? "Assessment updated." : "Assessment published." })
-    setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70 })
+    toast({ title: "Success", description: status === 'published' ? "Assessment published." : "Draft saved successfully." })
+    setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70, status: "draft" })
     setExamQuestions([])
     setEditingExamId(null)
     setActiveTab("exams")
@@ -697,7 +702,12 @@ export default function AdminDashboard() {
                             <div key={exam.id} className="flex items-center justify-between p-4 rounded-xl bg-muted border">
                               <div className="space-y-0.5">
                                 <p className="text-sm font-bold">{exam.title}</p>
-                                <p className="text-[10px] text-muted-foreground uppercase">{exam.timeLimitMinutes} min limit</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-[10px] text-muted-foreground uppercase">{exam.timeLimitMinutes} min limit</p>
+                                  <Badge variant={exam.status === 'published' ? 'default' : 'secondary'} className="text-[8px] h-4 px-1">
+                                    {exam.status || 'draft'}
+                                  </Badge>
+                                </div>
                               </div>
                               <Button variant="ghost" size="sm" onClick={() => setActiveTab('exams')}><ChevronRight className="w-4 h-4" /></Button>
                             </div>
@@ -716,7 +726,7 @@ export default function AdminDashboard() {
             <div className="space-y-6">
                <div className="flex items-center justify-between">
                  <h2 className="text-2xl font-bold">Assessment Vault</h2>
-                 <Button onClick={() => { setActiveTab('authoring'); setEditingExamId(null); setExamQuestions([]); setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70 }); }} className="gap-2">
+                 <Button onClick={() => { setActiveTab('authoring'); setEditingExamId(null); setExamQuestions([]); setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70, status: "draft" }); }} className="gap-2">
                    <Plus className="w-4 h-4" /> New Exam
                  </Button>
                </div>
@@ -727,6 +737,12 @@ export default function AdminDashboard() {
                    exams?.map((exam) => (
                      <Card key={exam.id} className="hover:border-primary transition-all overflow-hidden flex flex-col">
                        <CardHeader>
+                         <div className="flex items-center justify-between mb-2">
+                            <Badge variant={exam.status === 'published' ? 'default' : 'secondary'} className="uppercase text-[10px]">
+                              {exam.status || 'draft'}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground uppercase font-bold">{exam.timeLimitMinutes}m Limit</span>
+                         </div>
                          <CardTitle className="text-lg">{exam.title}</CardTitle>
                          <CardDescription className="line-clamp-2">{exam.description}</CardDescription>
                        </CardHeader>
@@ -863,8 +879,11 @@ export default function AdminDashboard() {
                      <Button variant="outline" onClick={() => setActiveTab('exams')} className="px-6 py-6 rounded-2xl">
                        Discard Changes
                      </Button>
-                     <Button className="px-10 py-6 text-lg shadow-2xl btn-premium rounded-2xl" onClick={handleSaveExam}>
-                       <Save className="w-4 h-4 mr-2" /> {editingExamId ? "Update Assessment" : "Publish Assessment"}
+                     <Button variant="secondary" className="px-8 py-6 text-lg rounded-2xl" onClick={(e) => handleSaveExam(e, "draft")}>
+                       <Save className="w-4 h-4 mr-2" /> Save Draft
+                     </Button>
+                     <Button className="px-10 py-6 text-lg shadow-2xl btn-premium rounded-2xl" onClick={(e) => handleSaveExam(e, "published")}>
+                       <Send className="w-4 h-4 mr-2" /> Publish Assessment
                      </Button>
                    </div>
                  </>

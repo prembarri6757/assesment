@@ -46,6 +46,14 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
 
   const initializeExam = async () => {
     if (!user || !exam || !questions) return
+    
+    // Safety check: Don't allow starting if it's a draft
+    if (exam.status === 'draft') {
+      toast({ title: "Access Denied", description: "This assessment is currently in draft mode.", variant: "destructive" })
+      router.push('/dashboard/student')
+      return
+    }
+
     const newResultId = doc(collection(db, "users", user.uid, "results")).id
     setResultId(newResultId)
     

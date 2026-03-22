@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState } from "react"
@@ -24,7 +25,7 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, doc } from "firebase/firestore"
+import { collection, doc, query, where } from "firebase/firestore"
 import { useAuth } from "@/firebase"
 import { signOut } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
@@ -49,7 +50,8 @@ export default function StudentDashboard() {
 
   const examsQuery = useMemoFirebase(() => {
     if (!user) return null
-    return collection(db, "exams")
+    // Only show published exams to students
+    return query(collection(db, "exams"), where("status", "==", "published"))
   }, [db, user])
   const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
 

@@ -26,9 +26,10 @@
         "description": { "type": "string" },
         "timeLimitMinutes": { "type": "number" },
         "passingScore": { "type": "number" },
-        "createdBy": { "type": "string" }
+        "createdBy": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "published"] }
       },
-      "required": ["id", "title", "timeLimitMinutes", "passingScore", "createdBy"]
+      "required": ["id", "title", "timeLimitMinutes", "passingScore", "createdBy", "status"]
     },
     "Question": {
       "$schema": "http://json-schema.org/draft-07/schema#",
