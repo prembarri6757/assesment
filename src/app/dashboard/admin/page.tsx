@@ -85,6 +85,7 @@ export default function AdminDashboard() {
   const [aiIdeas, setAiIdeas] = useState<GenerateQuestionIdeasOutput | null>(null)
   const [topic, setTopic] = useState("")
   const [examToDelete, setExamToDelete] = useState<string | null>(null)
+  const [userToDelete, setUserToDelete] = useState<string | null>(null)
   
   const [isProvisioning, setIsProvisioning] = useState(false)
   const [newStudent, setNewStudent] = useState({ email: "", password: "", username: "", role: "student" as "student" | "admin" })
@@ -159,11 +160,17 @@ export default function AdminDashboard() {
       const score = total > 0 ? Math.round((correct / total) * 100) : 0;
 
       const resultRef = doc(db, "users", res.studentId, "results", res.id);
-      await updateDoc(resultRef, {
+      updateDoc(resultRef, {
         score,
         correctCount: correct,
         totalQuestions: total,
         gradedAt: serverTimestamp()
+      }).catch(async (e) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: resultRef.path,
+          operation: 'update',
+          requestResourceData: { score, correctCount: correct, totalQuestions: total }
+        }));
       });
 
       toast({ title: "Grading Finalized", description: `Computed score: ${correct}/${total} (${score}%)` });
@@ -205,11 +212,16 @@ export default function AdminDashboard() {
           }
           const score = total > 0 ? Math.round((correct / total) * 100) : 0;
           const resultRef = doc(db, "users", res.studentId, "results", res.id);
-          await updateDoc(resultRef, {
+          updateDoc(resultRef, {
             score,
             correctCount: correct,
             totalQuestions: total,
             gradedAt: serverTimestamp()
+          }).catch(async (e) => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+              path: resultRef.path,
+              operation: 'update'
+            }));
           });
           successCount++;
         }
@@ -274,16 +286,36 @@ export default function AdminDashboard() {
     }))
   }
 
-  const handleDeleteExam = async () => {
+  const handleDeleteExam = () => {
     if (!examToDelete) return
-    try {
-      await deleteDoc(doc(db, "exams", examToDelete))
-      toast({ title: "Assessment Deleted", description: "The exam has been removed from the vault." })
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" })
-    } finally {
-      setExamToDelete(null)
-    }
+    const examRef = doc(db, "exams", examToDelete)
+    deleteDoc(examRef).catch(async (e) => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: examRef.path,
+        operation: 'delete'
+      }));
+    });
+    toast({ title: "Assessment Deleted", description: "The exam has been removed from the vault." })
+    setExamToDelete(null)
+  }
+
+  const handleDeleteUser = () => {
+    if (!userToDelete) return
+    const userRef = doc(db, "users", userToDelete)
+    const adminRef = doc(db, "admin_roles", userToDelete)
+
+    deleteDoc(userRef).catch(async (e) => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: userRef.path,
+        operation: 'delete'
+      }));
+    });
+    
+    // Attempt to delete admin role too, it will simply fail or succeed based on existence
+    deleteDoc(adminRef).catch(() => {});
+
+    toast({ title: "Identity Purged", description: "The user has been removed from the roster." })
+    setUserToDelete(null)
   }
 
   const handleSaveExam = (e: React.MouseEvent) => {
@@ -302,7 +334,12 @@ export default function AdminDashboard() {
       id: examId,
       createdBy: user.uid,
       createdAt: serverTimestamp()
-    })
+    }).catch(async (e) => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: examRef.path,
+        operation: 'write'
+      }));
+    });
 
     examQuestions.forEach(q => {
       const qId = doc(collection(db, `exams/${examId}/questions`)).id
@@ -314,12 +351,22 @@ export default function AdminDashboard() {
         examId,
         questionText: q.questionText,
         options: q.options
-      })
+      }).catch(async (e) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: publicQRef.path,
+          operation: 'write'
+        }));
+      });
 
       setDoc(privateARef, {
         id: qId,
         correctOptionIndex: q.correctOptionIndex
-      })
+      }).catch(async (e) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: privateARef.path,
+          operation: 'write'
+        }));
+      });
     })
 
     toast({ title: "Success", description: "Assessment published to the secure vault." })
@@ -335,19 +382,31 @@ export default function AdminDashboard() {
       const userCredential = await createUserWithEmailAndPassword(auth, newStudent.email, newStudent.password)
       const newUser = userCredential.user
 
-      await setDoc(doc(db, "users", newUser.uid), {
+      const userRef = doc(db, "users", newUser.uid)
+      setDoc(userRef, {
         id: newUser.uid,
         email: newUser.email,
         username: newStudent.username,
         role: newStudent.role,
         createdAt: serverTimestamp()
-      })
+      }).catch(async (e) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: userRef.path,
+          operation: 'write'
+        }));
+      });
 
       if (newStudent.role === 'admin') {
-        await setDoc(doc(db, "admin_roles", newUser.uid), {
+        const adminRef = doc(db, "admin_roles", newUser.uid)
+        setDoc(adminRef, {
           uid: newUser.uid,
           createdAt: serverTimestamp()
-        })
+        }).catch(async (e) => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: adminRef.path,
+            operation: 'write'
+          }));
+        });
       }
 
       toast({ title: "User Provisioned", description: `Account created for ${newStudent.username}.` })
@@ -367,18 +426,33 @@ export default function AdminDashboard() {
     const adminMarkerRef = doc(db, "admin_roles", editingUser.id)
 
     try {
-      await setDoc(userRef, {
+      updateDoc(userRef, {
         username: editingUser.username,
         role: editingUser.role
-      }, { merge: true })
+      }).catch(async (e) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: userRef.path,
+          operation: 'update'
+        }));
+      });
 
       if (editingUser.role === 'admin') {
-        await setDoc(adminMarkerRef, {
+        setDoc(adminMarkerRef, {
           uid: editingUser.id,
           createdAt: serverTimestamp()
-        }, { merge: true })
+        }, { merge: true }).catch(async (e) => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: adminMarkerRef.path,
+            operation: 'write'
+          }));
+        });
       } else {
-        await deleteDoc(adminMarkerRef)
+        deleteDoc(adminMarkerRef).catch(async (e) => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: adminMarkerRef.path,
+            operation: 'delete'
+          }));
+        });
       }
 
       toast({ title: "User Updated", description: "The system roster has been synchronized." })
@@ -750,9 +824,14 @@ export default function AdminDashboard() {
                              </Badge>
                            </TableCell>
                            <TableCell className="text-right">
-                             <Button variant="ghost" size="sm" onClick={() => setEditingUser(u)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                               <Edit2 className="w-3 h-3" />
-                             </Button>
+                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                               <Button variant="ghost" size="sm" onClick={() => setEditingUser(u)}>
+                                 <Edit2 className="w-3 h-3" />
+                               </Button>
+                               <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setUserToDelete(u.id)}>
+                                 <Trash2 className="w-3 h-3" />
+                               </Button>
+                             </div>
                            </TableCell>
                          </TableRow>
                        ))}
@@ -878,6 +957,19 @@ export default function AdminDashboard() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteExam} className="bg-destructive text-destructive-foreground">Purge Data</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Purge System Identity?</AlertDialogTitle>
+            <AlertDialogDescription>This will permanently remove this user from the gateway roster. They will lose all access and their results will be orphaned. This action is irreversible.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Identity</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteUser} className="bg-destructive text-destructive-foreground">Purge Identity</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
