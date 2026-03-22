@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useScrollReveal } from "@/hooks/use-scroll-reveal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -106,9 +106,14 @@ export default function AdminDashboard() {
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
 
-  // Filter State
+  // Filter State - Users
   const [userSearch, setUserSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState<string>("all")
+
+  // Filter State - Audit Logs
+  const [auditSearch, setAuditSearch] = useState("")
+  const [auditExamFilter, setAuditExamFilter] = useState<string>("all")
+  const [auditStatusFilter, setAuditStatusFilter] = useState<string>("all")
 
   const adminRoleRef = useMemoFirebase(() => {
     if (!user) return null
@@ -522,6 +527,24 @@ export default function AdminDashboard() {
     const matchesRole = roleFilter === "all" || u.role === roleFilter
     return matchesSearch && matchesRole
   })
+
+  const filteredResults = useMemo(() => {
+    return results?.filter(res => {
+      const matchesSearch = res.studentEmail?.toLowerCase().includes(auditSearch.toLowerCase()) || 
+                            res.examTitle?.toLowerCase().includes(auditSearch.toLowerCase())
+      const matchesExam = auditExamFilter === "all" || res.examTitle === auditExamFilter
+      const matchesStatus = auditStatusFilter === "all" || res.integrityStatus === auditStatusFilter
+      return matchesSearch && matchesExam && matchesStatus
+    })
+  }, [results, auditSearch, auditExamFilter, auditStatusFilter])
+
+  const uniqueExamTitles = useMemo(() => {
+    const titles = new Set<string>()
+    results?.forEach(res => {
+      if (res.examTitle) titles.add(res.examTitle)
+    })
+    return Array.from(titles).sort()
+  }, [results])
 
   if (isUserLoading || adminRoleLoading) {
     return (
@@ -974,7 +997,43 @@ export default function AdminDashboard() {
                   Grade All Results
                 </Button>
               </div>
-              <Card className="border-none shadow-sm p-6">
+
+              <Card className="border-none shadow-sm overflow-hidden">
+                <div className="p-4 border-b bg-muted/20 flex flex-col md:flex-row gap-4 items-center">
+                  <div className="relative flex-1 w-full">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search by student or exam..." 
+                      className="pl-10" 
+                      value={auditSearch} 
+                      onChange={(e) => setAuditSearch(e.target.value)} 
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                    <Select value={auditExamFilter} onValueChange={setAuditExamFilter}>
+                      <SelectTrigger className="w-full md:w-[200px]">
+                        <SelectValue placeholder="All Assessments" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Assessments</SelectItem>
+                        {uniqueExamTitles.map(title => (
+                          <SelectItem key={title} value={title}>{title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={auditStatusFilter} onValueChange={setAuditStatusFilter}>
+                      <SelectTrigger className="w-full md:w-[150px]">
+                        <SelectValue placeholder="All Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="Clean">Clean</SelectItem>
+                        <SelectItem value="Flagged">Flagged</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 {resultsLoading ? (
                   <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
                 ) : (
@@ -990,7 +1049,7 @@ export default function AdminDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {results?.map((res) => (
+                      {filteredResults?.map((res) => (
                         <TableRow key={res.id}>
                           <TableCell className="font-medium">{res.studentEmail}</TableCell>
                           <TableCell>{res.examTitle}</TableCell>
@@ -1024,6 +1083,13 @@ export default function AdminDashboard() {
                           </TableCell>
                         </TableRow>
                       ))}
+                      {filteredResults?.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-10 text-muted-foreground italic">
+                            No exam attempts match your criteria.
+                          </TableCell>
+                        </TableRow>
+                      )}
                     </TableBody>
                   </Table>
                 )}
