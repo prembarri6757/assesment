@@ -704,8 +704,8 @@ export default function AdminDashboard() {
                                 <p className="text-sm font-bold">{exam.title}</p>
                                 <div className="flex items-center gap-2">
                                   <p className="text-[10px] text-muted-foreground uppercase">{exam.timeLimitMinutes} min limit</p>
-                                  <Badge variant={exam.status === 'published' ? 'default' : 'secondary'} className="text-[8px] h-4 px-1">
-                                    {exam.status || 'draft'}
+                                  <Badge variant={exam.status === 'published' ? 'default' : 'secondary'} className="text-[8px] h-4 px-1 font-bold uppercase">
+                                    {exam.status === 'published' ? 'PUBLISHED' : 'DRAFT'}
                                   </Badge>
                                 </div>
                               </div>
@@ -738,8 +738,8 @@ export default function AdminDashboard() {
                      <Card key={exam.id} className="hover:border-primary transition-all overflow-hidden flex flex-col">
                        <CardHeader>
                          <div className="flex items-center justify-between mb-2">
-                            <Badge variant={exam.status === 'published' ? 'default' : 'secondary'} className="uppercase text-[10px]">
-                              {exam.status || 'draft'}
+                            <Badge variant={exam.status === 'published' ? 'default' : 'secondary'} className="uppercase text-[10px] font-bold">
+                              {exam.status === 'published' ? 'Published' : 'Draft'}
                             </Badge>
                             <span className="text-[10px] text-muted-foreground uppercase font-bold">{exam.timeLimitMinutes}m Limit</span>
                          </div>
