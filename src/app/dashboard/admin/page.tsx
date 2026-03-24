@@ -37,7 +37,8 @@ import {
   Square,
   Calendar,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Download
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs, updateDoc, writeBatch } from "firebase/firestore"
@@ -596,6 +597,79 @@ export default function AdminDashboard() {
     return Array.from(titles).sort()
   }, [results])
 
+  const handleDownloadCSV = () => {
+    if (!filteredResults || filteredResults.length === 0) return;
+
+    const headers = ["Student Email", "Exam Title", "Date", "Score", "Marks", "Outcome", "Integrity Status"];
+    const rows = filteredResults.map(res => {
+      const examData = exams?.find(e => e.id === res.examId);
+      const isGraded = res.score !== undefined;
+      const isPassed = isGraded && res.score >= (examData?.passingScore || 0);
+      const attemptDate = getSafeDate(res.startedAt);
+      const dateStr = attemptDate ? format(attemptDate, 'yyyy-MM-dd HH:mm') : 'N/A';
+      const outcome = isGraded ? (isPassed ? "PASS" : "FAIL") : "UNMARKED";
+      const marks = res.correctCount !== undefined ? `${res.correctCount}/${res.totalQuestions}` : "N/A";
+      
+      return [
+        res.studentEmail,
+        `"${res.examTitle}"`,
+        dateStr,
+        `${res.score || 0}%`,
+        marks,
+        outcome,
+        res.integrityStatus
+      ].join(",");
+    });
+
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `audit_logs_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadSingle = (res: any) => {
+    const examData = exams?.find(e => e.id === res.examId);
+    const isGraded = res.score !== undefined;
+    const isPassed = isGraded && res.score >= (examData?.passingScore || 0);
+    const attemptDate = getSafeDate(res.startedAt);
+    const dateStr = attemptDate ? format(attemptDate, 'yyyy-MM-dd HH:mm') : 'N/A';
+    
+    const content = `
+ASSESSMENT RESULT EXPORT
+------------------------
+Student: ${res.studentEmail}
+Exam: ${res.examTitle}
+Date: ${dateStr}
+Integrity Status: ${res.integrityStatus}
+
+RESULTS
+-------
+Score: ${res.score || 0}%
+Correct: ${res.correctCount || 0}
+Total: ${res.totalQuestions || 0}
+Outcome: ${isGraded ? (isPassed ? "PASS" : "FAIL") : "PENDING"}
+
+SYSTEM METRICS
+--------------
+Result ID: ${res.id}
+Exam ID: ${res.examId}
+    `.trim();
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `result_${res.studentEmail}_${res.id}.txt`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (isUserLoading || adminRoleLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -1058,6 +1132,9 @@ export default function AdminDashboard() {
                   <p className="text-muted-foreground text-sm">Detailed tracking of all exam attempts and integrity markers.</p>
                 </div>
                 <div className="flex gap-2">
+                  <Button variant="outline" onClick={handleDownloadCSV} disabled={!filteredResults || filteredResults.length === 0} className="gap-2">
+                    <Download className="w-4 h-4" /> Download Results (CSV)
+                  </Button>
                   {selectedLogs.length > 0 && (
                     <Button 
                       variant="destructive"
@@ -1193,6 +1270,15 @@ export default function AdminDashboard() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleDownloadSingle(res)}
+                                  className="text-primary hover:text-primary hover:bg-primary/5"
+                                  title="Download Individual Result"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </Button>
                                 <Button 
                                   variant="outline" 
                                   size="sm" 
