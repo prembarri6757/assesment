@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useCallback, use } from "react"
+import { useState, useEffect, useCallback, use, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useScrollReveal } from "@/hooks/use-scroll-reveal"
 import { Button } from "@/components/ui/button"
@@ -33,7 +33,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     if (!user) return null
     return collection(db, `exams/${id}/questions`)
   }, [db, id, user])
-  const { data: questions, isLoading: questionsLoading } = useCollection(questionsQuery)
+  const { data: rawQuestions, isLoading: questionsLoading } = useCollection(questionsQuery)
 
   // Local State
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0)
@@ -43,9 +43,20 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const [isFinished, setIsFinished] = useState(false)
   const [isStarted, setIsStarted] = useState(false)
   const [resultId, setResultId] = useState<string | null>(null)
+  const [shuffledQuestions, setShuffledQuestions] = useState<any[] | null>(null)
+
+  // Fisher-Yates Shuffle Algorithm
+  const shuffleQuestions = (array: any[]) => {
+    const shuffled = [...array]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    }
+    return shuffled
+  }
 
   const initializeExam = async () => {
-    if (!user || !exam || !questions) return
+    if (!user || !exam || !rawQuestions) return
     
     // Safety check: Don't allow starting if it's a draft
     if (exam.status === 'draft') {
@@ -53,6 +64,9 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       router.push('/dashboard/student')
       return
     }
+
+    // Jumble questions for this specific session
+    setShuffledQuestions(shuffleQuestions(rawQuestions))
 
     const newResultId = doc(collection(db, "users", user.uid, "results")).id
     setResultId(newResultId)
@@ -66,7 +80,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       examTitle: exam.title,
       startedAt: serverTimestamp(),
       integrityStatus: 'Clean',
-      totalQuestions: questions.length,
+      totalQuestions: rawQuestions.length,
       responses: {}
     })
     
@@ -148,7 +162,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   }
 
   const handleNext = () => {
-    if (questions && currentQuestionIdx < questions.length - 1) {
+    if (shuffledQuestions && currentQuestionIdx < shuffledQuestions.length - 1) {
       setCurrentQuestionIdx(prev => prev + 1)
     } else {
       finishExam()
@@ -166,7 +180,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     )
   }
 
-  if (!exam || !questions) return <div className="min-h-screen flex items-center justify-center">Assessment unavailable.</div>
+  if (!exam || !rawQuestions) return <div className="min-h-screen flex items-center justify-center">Assessment unavailable.</div>
 
   if (!isStarted) {
     return (
@@ -185,7 +199,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
               </div>
               <div className="p-4 border rounded-lg text-center bg-muted/30">
                 <p className="text-xs font-bold uppercase text-muted-foreground">Questions</p>
-                <p className="text-xl font-bold">{questions.length}</p>
+                <p className="text-xl font-bold">{rawQuestions.length}</p>
               </div>
             </div>
             <div className="bg-destructive/10 p-4 rounded-lg border border-destructive/20 text-xs text-destructive flex gap-3">
@@ -227,8 +241,10 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     )
   }
 
-  const currentQuestion = questions[currentQuestionIdx]
-  const progress = ((currentQuestionIdx) / questions.length) * 100
+  const currentQuestion = shuffledQuestions ? shuffledQuestions[currentQuestionIdx] : null
+  const progress = shuffledQuestions ? ((currentQuestionIdx) / shuffledQuestions.length) * 100 : 0
+
+  if (!currentQuestion) return null
 
   return (
     <div ref={containerRef} className="min-h-screen bg-background select-none">
@@ -237,7 +253,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
           <div className="flex items-center gap-4">
              <div className="hidden sm:block">
                <p className="font-bold text-sm">{exam.title}</p>
-               <p className="text-[10px] text-muted-foreground">Question {currentQuestionIdx + 1} of {questions.length}</p>
+               <p className="text-[10px] text-muted-foreground">Question {currentQuestionIdx + 1} of {shuffledQuestions?.length}</p>
              </div>
           </div>
           <div className={`px-4 py-2 rounded-lg font-mono text-xl border transition-all duration-500 ${timeLeft < 60 ? 'bg-destructive/10 border-destructive text-destructive pulse-warning' : 'bg-muted'}`}>
@@ -283,7 +299,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             <p className="text-xs text-muted-foreground italic">Responses synced securely.</p>
             <div className="flex gap-4">
               <Button type="button" onClick={handleNext} disabled={answers[currentQuestion.id] === undefined} className="btn-premium px-8">
-                {currentQuestionIdx === questions.length - 1 ? 'Finalize' : 'Next'}
+                {shuffledQuestions && currentQuestionIdx === shuffledQuestions.length - 1 ? 'Finalize' : 'Next'}
               </Button>
             </div>
           </CardFooter>
