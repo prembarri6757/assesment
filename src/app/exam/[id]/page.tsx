@@ -68,7 +68,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       return
     }
 
-    // CRITICAL: Jumble questions for this specific session and every attempt
+    // RANDOMIZE questions for this specific session
     setShuffledQuestions(shuffleQuestions(rawQuestions))
 
     const newResultId = doc(collection(db, "users", user.uid, "results")).id
@@ -93,11 +93,14 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     setIsStarted(true)
     setTimeLeft(exam.timeLimitMinutes * 60)
     
+    // Attempt to enforce Fullscreen
     try {
       if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen()
+        await document.documentElement.requestFullscreen()
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Fullscreen request failed. This may happen if not triggered by user interaction or browser policy.")
+    }
   }
 
   // Auto-Save Effect: Syncs responses to Firestore as the student progresses
@@ -118,46 +121,95 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       integrityStatus: isFlagged ? 'Flagged' : 'Clean'
     }, { merge: true }).catch(() => {})
 
+    // Exit Fullscreen on completion
     if (document.fullscreenElement) {
-      document.exitFullscreen()
+      document.exitFullscreen().catch(() => {})
     }
-  }, [isFinished, resultId, isFlagged, db, user])
 
-  // Anti-Cheat: Visibility and Focus tracking
+    toast({
+      title: "Assessment Completed",
+      description: "Your responses have been securely submitted.",
+    })
+  }, [isFinished, resultId, isFlagged, db, user, toast])
+
+  // ANTI-CHEAT: Exit prevention and Focus tracking
   useEffect(() => {
+    if (!isStarted || isFinished) return
+
+    const handleProctoringViolation = () => {
+      if (isFinished) return
+      setIsFlagged(true)
+      if (resultId && user) {
+        const resultRef = doc(db, "users", user.uid, "results", resultId)
+        setDoc(resultRef, { integrityStatus: 'Flagged' }, { merge: true }).catch(() => {})
+      }
+      toast({
+        title: "SECURITY ALERT",
+        description: "Focus loss or window minimize detected. Your session has been flagged.",
+        variant: "destructive"
+      })
+    }
+
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && isStarted && !isFinished) {
-        setIsFlagged(true)
-        if (resultId && user) {
-          const resultRef = doc(db, "users", user.uid, "results", resultId)
-          setDoc(resultRef, { integrityStatus: 'Flagged' }, { merge: true }).catch(() => {})
-        }
+      if (document.visibilityState === 'hidden') {
+        handleProctoringViolation()
+      }
+    }
+
+    const handleBlur = () => {
+      handleProctoringViolation()
+    }
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        handleProctoringViolation()
         toast({
-          title: "SECURITY ALERT",
-          description: "Unauthorized focus loss detected. Session flagged.",
+          title: "PROCTORING ALERT",
+          description: "Exiting full-screen is prohibited during active assessments.",
           variant: "destructive"
         })
       }
     }
 
-    if (isStarted && !isFinished) {
-      document.addEventListener("visibilitychange", handleVisibilityChange)
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = "Exiting the test will result in a flag. Are you sure?"
+      return e.returnValue
     }
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    window.addEventListener("blur", handleBlur)
+    document.addEventListener("fullscreenchange", handleFullscreenChange)
+    window.addEventListener("beforeunload", handleBeforeUnload)
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.removeEventListener("blur", handleBlur)
+      document.removeEventListener("fullscreenchange", handleFullscreenChange)
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
   }, [isStarted, isFinished, resultId, db, toast, user])
 
-  // Timer Countdown Logic
+  // Timer Countdown Logic with AUTO-SUBMIT
   useEffect(() => {
-    if (!isStarted || isFinished || timeLeft <= 0) return
+    if (!isStarted || isFinished || timeLeft <= 0) {
+      if (isStarted && timeLeft <= 0 && !isFinished) {
+        finishExam()
+      }
+      return
+    }
+
     const interval = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
-          finishExam()
+          clearInterval(interval)
+          finishExam() // AUTO-SUBMIT on timer completion
           return 0
         }
         return prev - 1
       })
     }, 1000)
+
     return () => clearInterval(interval)
   }, [isStarted, isFinished, timeLeft, finishExam])
 
@@ -210,7 +262,12 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             </div>
             <div className="bg-destructive/10 p-4 rounded-lg border border-destructive/20 text-xs text-destructive flex gap-3">
               <AlertCircle className="w-5 h-5 shrink-0" />
-              <p>Warning: This is a Zero-Trust proctored session. Questions are randomized for your attempt. Attempting to bypass focus mode will trigger a flag.</p>
+              <div className="space-y-1">
+                <p className="font-bold">ZERO-TRUST PROTOCOL ACTIVE</p>
+                <p>1. Full-screen mode is mandatory.</p>
+                <p>2. Minimizing the window or switching tabs will flag your session.</p>
+                <p>3. The test will auto-submit exactly when the timer hits zero.</p>
+              </div>
             </div>
           </CardContent>
           <CardFooter>
@@ -235,8 +292,12 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
           <CardContent className="space-y-4">
             <Alert variant={isFlagged ? "destructive" : "default"}>
               <ShieldAlert className="h-4 w-4" />
-              <AlertTitle>Status: {isFlagged ? 'Flagged' : 'Secure'}</AlertTitle>
-              <AlertDescription>Your session metadata is under review by the proctor.</AlertDescription>
+              <AlertTitle>Integrity Status: {isFlagged ? 'Flagged' : 'Secure'}</AlertTitle>
+              <AlertDescription>
+                {isFlagged 
+                  ? "Proctoring violations were detected during your session. This attempt is under review." 
+                  : "No integrity issues were detected. Your submission is verified."}
+              </AlertDescription>
             </Alert>
           </CardContent>
           <CardFooter>
@@ -262,7 +323,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
                <p className="text-[10px] text-muted-foreground">Question {currentQuestionIdx + 1} of {shuffledQuestions?.length}</p>
              </div>
           </div>
-          <div className={`px-4 py-2 rounded-lg font-mono text-xl border transition-all duration-500 ${timeLeft < 60 ? 'bg-destructive/10 border-destructive text-destructive pulse-warning' : 'bg-muted'}`}>
+          <div className={`px-4 py-2 rounded-lg font-mono text-xl border transition-all duration-500 ${timeLeft < 60 ? 'bg-destructive/10 border-destructive text-destructive animate-pulse' : 'bg-muted'}`}>
             {formatTime(timeLeft)}
           </div>
         </div>
@@ -305,7 +366,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             <p className="text-xs text-muted-foreground italic">Responses synced securely.</p>
             <div className="flex gap-4">
               <Button type="button" onClick={handleNext} disabled={answers[currentQuestion.id] === undefined} className="btn-premium px-8">
-                {shuffledQuestions && currentQuestionIdx === shuffledQuestions.length - 1 ? 'Finalize' : 'Next'}
+                {shuffledQuestions && currentQuestionIdx === shuffledQuestions.length - 1 ? 'Finalize Session' : 'Save & Next'}
               </Button>
             </div>
           </CardFooter>
