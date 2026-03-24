@@ -568,16 +568,16 @@ export default function AdminDashboard() {
   }
 
   const filteredUsers = allUsers?.filter(u => {
-    const matchesSearch = u.username?.toLowerCase().includes(userSearch.toLowerCase()) || 
-                          u.email?.toLowerCase().includes(userSearch.toLowerCase())
+    const matchesSearch = (u.username?.toLowerCase() || "").includes(userSearch.toLowerCase()) || 
+                          (u.email?.toLowerCase() || "").includes(userSearch.toLowerCase())
     const matchesRole = roleFilter === "all" || u.role === roleFilter
     return matchesSearch && matchesRole
   })
 
   const filteredResults = useMemo(() => {
     return results?.filter(res => {
-      const matchesSearch = res.studentEmail?.toLowerCase().includes(auditSearch.toLowerCase()) || 
-                            res.examTitle?.toLowerCase().includes(auditSearch.toLowerCase())
+      const matchesSearch = (res.studentEmail?.toLowerCase() || "").includes(auditSearch.toLowerCase()) || 
+                            (res.examTitle?.toLowerCase() || "").includes(auditSearch.toLowerCase())
       const matchesExam = auditExamFilter === "all" || res.examTitle === auditExamFilter
       const matchesStatus = auditStatusFilter === "all" || res.integrityStatus === auditStatusFilter
       return matchesSearch && matchesExam && matchesStatus
@@ -973,7 +973,7 @@ export default function AdminDashboard() {
                         placeholder="Search by name or email..." 
                         className="pl-10" 
                         value={userSearch} 
-                        onChange={(e) => userSearch(e.target.value)} 
+                        onChange={(e) => setUserSearch(e.target.value)} 
                       />
                     </div>
                     <div className="flex items-center gap-2 w-full md:w-auto">
