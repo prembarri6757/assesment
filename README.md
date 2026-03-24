@@ -26,7 +26,7 @@ git remote add origin https://github.com/prembarri6757/assesment.git
 git add .
 git commit -m "Initial commit: Secure Assessment Gateway"
 git branch -M main
-git push -u origin main
+git push -u origin main phone
 ```
 
 ## Deployment to Vercel

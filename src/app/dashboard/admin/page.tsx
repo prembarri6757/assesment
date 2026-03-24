@@ -32,7 +32,9 @@ import {
   Target,
   Search,
   Filter,
-  Send
+  Send,
+  CheckSquare,
+  Square
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs, updateDoc, writeBatch } from "firebase/firestore"
@@ -49,6 +51,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/firebase"
 import { signOut, createUserWithEmailAndPassword } from "firebase/auth"
 import { cn } from "@/lib/utils"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -90,12 +93,16 @@ export default function AdminDashboard() {
   const [topic, setTopic] = useState("")
   const [examToDelete, setExamToDelete] = useState<string | null>(null)
   const [userToDelete, setUserToDelete] = useState<string | null>(null)
+  const [logsToDelete, setLogsToDelete] = useState<any[] | null>(null)
   
   const [isProvisioning, setIsProvisioning] = useState(false)
   const [newStudent, setNewStudent] = useState({ email: "", password: "", username: "", role: "student" as "student" | "admin" })
   const [editingUser, setEditingUser] = useState<any | null>(null)
   const [isGrading, setIsGrading] = useState<string | null>(null)
   const [isGradingAll, setIsGradingAll] = useState(false)
+
+  // Selection state for Audit Logs
+  const [selectedLogs, setSelectedLogs] = useState<string[]>([])
 
   // Builder State
   const [editingExamId, setEditingExamId] = useState<string | null>(null)
@@ -377,6 +384,40 @@ export default function AdminDashboard() {
     toast({ title: "Identity Purged", description: "The user has been removed from the roster." })
     setUserToDelete(null)
   }
+
+  const handleDeleteLogs = async () => {
+    if (!logsToDelete || logsToDelete.length === 0) return;
+    
+    const batch = writeBatch(db);
+    logsToDelete.forEach(log => {
+      const logRef = doc(db, "users", log.studentId, "results", log.id);
+      batch.delete(logRef);
+    });
+
+    try {
+      await batch.commit();
+      toast({ title: "Audit Logs Purged", description: `Successfully removed ${logsToDelete.length} records.` });
+      setSelectedLogs([]);
+    } catch (e: any) {
+      toast({ title: "Purge Error", description: e.message, variant: "destructive" });
+    } finally {
+      setLogsToDelete(null);
+    }
+  };
+
+  const toggleLogSelection = (id: string) => {
+    setSelectedLogs(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAllLogs = (resultsOnPage: any[]) => {
+    if (selectedLogs.length === resultsOnPage.length) {
+      setSelectedLogs([]);
+    } else {
+      setSelectedLogs(resultsOnPage.map(r => r.id));
+    }
+  };
 
   const handleSaveExam = (e: React.MouseEvent, status: "draft" | "published") => {
     e.preventDefault()
@@ -932,7 +973,7 @@ export default function AdminDashboard() {
                         placeholder="Search by name or email..." 
                         className="pl-10" 
                         value={userSearch} 
-                        onChange={(e) => setUserSearch(e.target.value)} 
+                        onChange={(e) => userSearch(e.target.value)} 
                       />
                     </div>
                     <div className="flex items-center gap-2 w-full md:w-auto">
@@ -1007,14 +1048,28 @@ export default function AdminDashboard() {
                   <h2 className="text-2xl font-bold">Audit Logs</h2>
                   <p className="text-muted-foreground text-sm">Detailed tracking of all exam attempts and integrity markers.</p>
                 </div>
-                <Button 
-                  onClick={handleGradeAll} 
-                  disabled={isGradingAll || !results || results.length === 0}
-                  className="gap-2"
-                >
-                  {isGradingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
-                  Grade All Results
-                </Button>
+                <div className="flex gap-2">
+                  {selectedLogs.length > 0 && (
+                    <Button 
+                      variant="destructive"
+                      className="gap-2"
+                      onClick={() => {
+                        const logs = filteredResults?.filter(r => selectedLogs.includes(r.id)) || [];
+                        setLogsToDelete(logs);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" /> Delete Selected ({selectedLogs.length})
+                    </Button>
+                  )}
+                  <Button 
+                    onClick={handleGradeAll} 
+                    disabled={isGradingAll || !results || results.length === 0}
+                    className="gap-2"
+                  >
+                    {isGradingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
+                    Grade All Results
+                  </Button>
+                </div>
               </div>
 
               <Card className="border-none shadow-sm overflow-hidden">
@@ -1059,17 +1114,29 @@ export default function AdminDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[50px]">
+                          <Checkbox 
+                            checked={filteredResults?.length > 0 && selectedLogs.length === filteredResults?.length}
+                            onCheckedChange={() => toggleAllLogs(filteredResults || [])}
+                          />
+                        </TableHead>
                         <TableHead>Student Identity</TableHead>
                         <TableHead>Assessment Title</TableHead>
                         <TableHead>Marks Gained</TableHead>
                         <TableHead>Calculated Score</TableHead>
                         <TableHead>Integrity Status</TableHead>
-                        <TableHead className="text-right">Grading</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredResults?.map((res) => (
-                        <TableRow key={res.id}>
+                        <TableRow key={res.id} className={cn(selectedLogs.includes(res.id) && "bg-muted/50")}>
+                          <TableCell>
+                            <Checkbox 
+                              checked={selectedLogs.includes(res.id)}
+                              onCheckedChange={() => toggleLogSelection(res.id)}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">{res.studentEmail}</TableCell>
                           <TableCell>{res.examTitle}</TableCell>
                           <TableCell className="font-mono">
@@ -1089,22 +1156,32 @@ export default function AdminDashboard() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              disabled={isGrading === res.id || isGradingAll}
-                              onClick={() => handleGradeResult(res)}
-                              className="gap-2"
-                            >
-                              {isGrading === res.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Calculator className="w-3 h-3" />}
-                              Grade
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                disabled={isGrading === res.id || isGradingAll}
+                                onClick={() => handleGradeResult(res)}
+                                className="gap-2"
+                              >
+                                {isGrading === res.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Calculator className="w-3 h-3" />}
+                                Grade
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-destructive"
+                                onClick={() => setLogsToDelete([res])}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
                       {filteredResults?.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-10 text-muted-foreground italic">
+                          <TableCell colSpan={7} className="text-center py-10 text-muted-foreground italic">
                             No exam attempts match your criteria.
                           </TableCell>
                         </TableRow>
@@ -1171,6 +1248,23 @@ export default function AdminDashboard() {
           <AlertDialogFooter>
             <AlertDialogCancel>Keep Identity</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteUser} className="bg-destructive text-destructive-foreground">Purge Identity</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!logsToDelete} onOpenChange={(open) => !open && setLogsToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Purge Audit Records?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {logsToDelete && logsToDelete.length > 1 
+                ? `You are about to permanently delete ${logsToDelete.length} exam attempts. This action is irreversible and will remove all student performance data for these sessions.` 
+                : "This specific exam attempt will be permanently removed from the audit logs."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Records</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteLogs} className="bg-destructive text-destructive-foreground">Purge Records</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
