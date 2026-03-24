@@ -21,7 +21,10 @@ import {
   User,
   AlertTriangle,
   CircleUser,
-  Loader2
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Calendar
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
@@ -31,6 +34,7 @@ import { signOut } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { format } from "date-fns"
 
 export default function StudentDashboard() {
   const containerRef = useScrollReveal()
@@ -208,28 +212,43 @@ export default function StudentDashboard() {
                   <div className="p-20 flex justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>
                 ) : (
                   <div className="divide-y divide-border/50">
-                    {results?.map((res) => (
-                      <div key={res.id} className="p-10 flex items-center justify-between hover:bg-muted/30 transition-all">
-                        <div className="space-y-3">
-                          <p className="font-bold text-xl">{res.examTitle}</p>
-                          <div className="flex items-center gap-4">
-                            <Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'} className="text-[10px] px-4 py-1 font-black uppercase tracking-widest rounded-full">
-                              {res.integrityStatus}
-                            </Badge>
-                            {res.correctCount !== undefined && (
-                              <Badge variant="secondary" className="text-[10px] px-4 py-1 font-black uppercase tracking-widest rounded-full gap-2">
-                                <Target className="w-3 h-3" /> Marks: {res.correctCount} / {res.totalQuestions || 0}
+                    {results?.map((res) => {
+                      const examData = exams?.find(e => e.id === res.examId);
+                      const isGraded = res.score !== undefined;
+                      const isPassed = isGraded && res.score >= (examData?.passingScore || 0);
+
+                      return (
+                        <div key={res.id} className="p-10 flex items-center justify-between hover:bg-muted/30 transition-all">
+                          <div className="space-y-3">
+                            <p className="font-bold text-xl">{res.examTitle}</p>
+                            <div className="flex items-center gap-4 flex-wrap">
+                              <Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'} className="text-[10px] px-4 py-1 font-black uppercase tracking-widest rounded-full">
+                                {res.integrityStatus}
                               </Badge>
-                            )}
-                            <span className="text-xs text-muted-foreground font-mono">REF: {res.id.slice(0,10)}</span>
+                              {isGraded && (
+                                <Badge variant={isPassed ? 'default' : 'destructive'} className={cn("text-[10px] px-4 py-1 font-black uppercase tracking-widest rounded-full gap-1", isPassed ? "bg-emerald-500 hover:bg-emerald-600" : "")}>
+                                  {isPassed ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                                  {isPassed ? "PASS" : "FAIL"}
+                                </Badge>
+                              )}
+                              {res.correctCount !== undefined && (
+                                <Badge variant="secondary" className="text-[10px] px-4 py-1 font-black uppercase tracking-widest rounded-full gap-2">
+                                  <Target className="w-3 h-3" /> Marks: {res.correctCount} / {res.totalQuestions || 0}
+                                </Badge>
+                              )}
+                              <div className="flex items-center gap-1 text-muted-foreground">
+                                <Calendar className="w-3 h-3" />
+                                <span className="text-[10px] uppercase font-bold">{res.startedAt ? format(new Date(res.startedAt), 'MMM dd, yyyy @ hh:mm a') : 'Unknown Date'}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-5xl font-black text-primary">{res.score || 0}%</p>
+                            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-2">Calculated Score</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-5xl font-black text-primary">{res.score || 0}%</p>
-                          <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-2">Calculated Score</p>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {(!results || results.length === 0) && (
                       <div className="p-24 text-center text-muted-foreground italic text-lg">
                         Your session archive is currently empty.

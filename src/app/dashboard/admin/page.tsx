@@ -34,7 +34,10 @@ import {
   Filter,
   Send,
   CheckSquare,
-  Square
+  Square,
+  Calendar,
+  CheckCircle2,
+  XCircle
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs, updateDoc, writeBatch } from "firebase/firestore"
@@ -52,6 +55,7 @@ import { useAuth } from "@/firebase"
 import { signOut, createUserWithEmailAndPassword } from "firebase/auth"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
+import { format } from "date-fns"
 import {
   Dialog,
   DialogContent,
@@ -973,7 +977,7 @@ export default function AdminDashboard() {
                         placeholder="Search by name or email..." 
                         className="pl-10" 
                         value={userSearch} 
-                        onChange={(e) => setUserSearch(e.target.value)} 
+                        onChange={(e) => userSearch(e.target.value)} 
                       />
                     </div>
                     <div className="flex items-center gap-2 w-full md:w-auto">
@@ -1122,66 +1126,93 @@ export default function AdminDashboard() {
                         </TableHead>
                         <TableHead>Student Identity</TableHead>
                         <TableHead>Assessment Title</TableHead>
+                        <TableHead>Attempt Time</TableHead>
                         <TableHead>Marks Gained</TableHead>
                         <TableHead>Calculated Score</TableHead>
+                        <TableHead>Outcome</TableHead>
                         <TableHead>Integrity Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredResults?.map((res) => (
-                        <TableRow key={res.id} className={cn(selectedLogs.includes(res.id) && "bg-muted/50")}>
-                          <TableCell>
-                            <Checkbox 
-                              checked={selectedLogs.includes(res.id)}
-                              onCheckedChange={() => toggleLogSelection(res.id)}
-                            />
-                          </TableCell>
-                          <TableCell className="font-medium">{res.studentEmail}</TableCell>
-                          <TableCell>{res.examTitle}</TableCell>
-                          <TableCell className="font-mono">
-                            {res.correctCount !== undefined ? (
-                              <Badge variant="outline" className="gap-1 font-mono">
-                                <Target className="w-3 h-3" /> {res.correctCount} / {res.totalQuestions || 0}
+                      {filteredResults?.map((res) => {
+                        const examData = exams?.find(e => e.id === res.examId);
+                        const isGraded = res.score !== undefined;
+                        const isPassed = isGraded && res.score >= (examData?.passingScore || 0);
+
+                        return (
+                          <TableRow key={res.id} className={cn(selectedLogs.includes(res.id) && "bg-muted/50")}>
+                            <TableCell>
+                              <Checkbox 
+                                checked={selectedLogs.includes(res.id)}
+                                onCheckedChange={() => toggleLogSelection(res.id)}
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium">{res.studentEmail}</TableCell>
+                            <TableCell>{res.examTitle}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium">{res.startedAt ? format(new Date(res.startedAt), 'MMM dd, yyyy') : 'N/A'}</span>
+                                <span className="text-[10px] text-muted-foreground">{res.startedAt ? format(new Date(res.startedAt), 'hh:mm a') : ''}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-mono">
+                              {res.correctCount !== undefined ? (
+                                <Badge variant="outline" className="gap-1 font-mono">
+                                  <Target className="w-3 h-3" /> {res.correctCount} / {res.totalQuestions || 0}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground italic text-xs">Pending...</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="font-bold text-primary">{res.score || 0}%</TableCell>
+                            <TableCell>
+                              {isGraded ? (
+                                <Badge 
+                                  variant={isPassed ? 'default' : 'destructive'} 
+                                  className={cn("gap-1 font-bold", isPassed ? "bg-emerald-500 hover:bg-emerald-600" : "")}
+                                >
+                                  {isPassed ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                                  {isPassed ? "PASS" : "FAIL"}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground italic text-[10px]">Unmarked</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'} className="gap-1">
+                                {res.integrityStatus === 'Flagged' && <AlertTriangle className="w-3 h-3" />}
+                                {res.integrityStatus}
                               </Badge>
-                            ) : (
-                              <span className="text-muted-foreground italic text-xs">Pending...</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="font-bold text-primary">{res.score || 0}%</TableCell>
-                          <TableCell>
-                            <Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'} className="gap-1">
-                              {res.integrityStatus === 'Flagged' && <AlertTriangle className="w-3 h-3" />}
-                              {res.integrityStatus}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                disabled={isGrading === res.id || isGradingAll}
-                                onClick={() => handleGradeResult(res)}
-                                className="gap-2"
-                              >
-                                {isGrading === res.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Calculator className="w-3 h-3" />}
-                                Grade
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="text-destructive"
-                                onClick={() => setLogsToDelete([res])}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  disabled={isGrading === res.id || isGradingAll}
+                                  onClick={() => handleGradeResult(res)}
+                                  className="gap-2"
+                                >
+                                  {isGrading === res.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Calculator className="w-3 h-3" />}
+                                  Grade
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="text-destructive"
+                                  onClick={() => setLogsToDelete([res])}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                       {filteredResults?.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center py-10 text-muted-foreground italic">
+                          <TableCell colSpan={9} className="text-center py-10 text-muted-foreground italic">
                             No exam attempts match your criteria.
                           </TableCell>
                         </TableRow>
