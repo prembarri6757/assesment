@@ -45,7 +45,10 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const [resultId, setResultId] = useState<string | null>(null)
   const [shuffledQuestions, setShuffledQuestions] = useState<any[] | null>(null)
 
-  // Fisher-Yates Shuffle Algorithm
+  /**
+   * Fisher-Yates Shuffle Algorithm
+   * Ensures a truly randomized distribution of questions for every attempt.
+   */
   const shuffleQuestions = (array: any[]) => {
     const shuffled = [...array]
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -65,14 +68,15 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       return
     }
 
-    // Jumble questions for this specific session
+    // CRITICAL: Jumble questions for this specific session and every attempt
     setShuffledQuestions(shuffleQuestions(rawQuestions))
 
     const newResultId = doc(collection(db, "users", user.uid, "results")).id
     setResultId(newResultId)
     
     const resultRef = doc(db, "users", user.uid, "results", newResultId)
-    await setDoc(resultRef, {
+    // Initialize the result document in Firestore
+    setDoc(resultRef, {
       id: newResultId,
       studentId: user.uid,
       studentEmail: user.email,
@@ -82,6 +86,8 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       integrityStatus: 'Clean',
       totalQuestions: rawQuestions.length,
       responses: {}
+    }).catch((e) => {
+      console.error("Session sync failed:", e)
     })
     
     setIsStarted(true)
@@ -94,11 +100,11 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     } catch (e) {}
   }
 
-  // Auto-Save Effect
+  // Auto-Save Effect: Syncs responses to Firestore as the student progresses
   useEffect(() => {
     if (isStarted && !isFinished && resultId && user && Object.keys(answers).length > 0) {
       const resultRef = doc(db, "users", user.uid, "results", resultId)
-      setDoc(resultRef, { responses: answers }, { merge: true })
+      setDoc(resultRef, { responses: answers }, { merge: true }).catch(() => {})
     }
   }, [answers, isStarted, isFinished, resultId, db, user])
 
@@ -107,24 +113,24 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     setIsFinished(true)
 
     const resultRef = doc(db, "users", user.uid, "results", resultId)
-    await setDoc(resultRef, {
+    setDoc(resultRef, {
       completedAt: serverTimestamp(),
       integrityStatus: isFlagged ? 'Flagged' : 'Clean'
-    }, { merge: true })
+    }, { merge: true }).catch(() => {})
 
     if (document.fullscreenElement) {
       document.exitFullscreen()
     }
   }, [isFinished, resultId, isFlagged, db, user])
 
-  // Anti-Cheat
+  // Anti-Cheat: Visibility and Focus tracking
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && isStarted && !isFinished) {
         setIsFlagged(true)
         if (resultId && user) {
           const resultRef = doc(db, "users", user.uid, "results", resultId)
-          setDoc(resultRef, { integrityStatus: 'Flagged' }, { merge: true })
+          setDoc(resultRef, { integrityStatus: 'Flagged' }, { merge: true }).catch(() => {})
         }
         toast({
           title: "SECURITY ALERT",
@@ -140,7 +146,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
   }, [isStarted, isFinished, resultId, db, toast, user])
 
-  // Timer
+  // Timer Countdown Logic
   useEffect(() => {
     if (!isStarted || isFinished || timeLeft <= 0) return
     const interval = setInterval(() => {
@@ -204,7 +210,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             </div>
             <div className="bg-destructive/10 p-4 rounded-lg border border-destructive/20 text-xs text-destructive flex gap-3">
               <AlertCircle className="w-5 h-5 shrink-0" />
-              <p>Warning: This is a Zero-Trust proctored session. Answer keys are stored in a restricted collection inaccessible to students. Attempting to bypass focus mode will trigger a flag.</p>
+              <p>Warning: This is a Zero-Trust proctored session. Questions are randomized for your attempt. Attempting to bypass focus mode will trigger a flag.</p>
             </div>
           </CardContent>
           <CardFooter>
