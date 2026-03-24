@@ -625,6 +625,11 @@ export default function AdminDashboard() {
     { id: "audit", label: "Audit Logs", icon: History },
   ]
 
+  const getSafeDate = (dateVal: any) => {
+    if (!dateVal) return null;
+    return dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
+  }
+
   return (
     <div ref={containerRef} className="min-h-screen bg-background flex">
       <aside className={cn(
@@ -977,7 +982,7 @@ export default function AdminDashboard() {
                         placeholder="Search by name or email..." 
                         className="pl-10" 
                         value={userSearch} 
-                        onChange={(e) => userSearch(e.target.value)} 
+                        onChange={(e) => setUserSearch(e.target.value)} 
                       />
                     </div>
                     <div className="flex items-center gap-2 w-full md:w-auto">
@@ -1139,6 +1144,7 @@ export default function AdminDashboard() {
                         const examData = exams?.find(e => e.id === res.examId);
                         const isGraded = res.score !== undefined;
                         const isPassed = isGraded && res.score >= (examData?.passingScore || 0);
+                        const attemptDate = getSafeDate(res.startedAt);
 
                         return (
                           <TableRow key={res.id} className={cn(selectedLogs.includes(res.id) && "bg-muted/50")}>
@@ -1152,8 +1158,8 @@ export default function AdminDashboard() {
                             <TableCell>{res.examTitle}</TableCell>
                             <TableCell className="whitespace-nowrap">
                               <div className="flex flex-col">
-                                <span className="text-xs font-medium">{res.startedAt ? format(new Date(res.startedAt), 'MMM dd, yyyy') : 'N/A'}</span>
-                                <span className="text-[10px] text-muted-foreground">{res.startedAt ? format(new Date(res.startedAt), 'hh:mm a') : ''}</span>
+                                <span className="text-xs font-medium">{attemptDate ? format(attemptDate, 'MMM dd, yyyy') : 'N/A'}</span>
+                                <span className="text-[10px] text-muted-foreground">{attemptDate ? format(attemptDate, 'hh:mm a') : ''}</span>
                               </div>
                             </TableCell>
                             <TableCell className="font-mono">

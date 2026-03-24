@@ -79,6 +79,11 @@ export default function StudentDashboard() {
     router.push('/')
   }
 
+  const getSafeDate = (dateVal: any) => {
+    if (!dateVal) return null;
+    return dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
+  }
+
   // Calculate Stats
   const stats = {
     totalTaken: results?.length || 0,
@@ -216,6 +221,7 @@ export default function StudentDashboard() {
                       const examData = exams?.find(e => e.id === res.examId);
                       const isGraded = res.score !== undefined;
                       const isPassed = isGraded && res.score >= (examData?.passingScore || 0);
+                      const attemptDate = getSafeDate(res.startedAt);
 
                       return (
                         <div key={res.id} className="p-10 flex items-center justify-between hover:bg-muted/30 transition-all">
@@ -238,7 +244,7 @@ export default function StudentDashboard() {
                               )}
                               <div className="flex items-center gap-1 text-muted-foreground">
                                 <Calendar className="w-3 h-3" />
-                                <span className="text-[10px] uppercase font-bold">{res.startedAt ? format(new Date(res.startedAt), 'MMM dd, yyyy @ hh:mm a') : 'Unknown Date'}</span>
+                                <span className="text-[10px] uppercase font-bold">{attemptDate ? format(attemptDate, 'MMM dd, yyyy @ hh:mm a') : 'Unknown Date'}</span>
                               </div>
                             </div>
                           </div>
