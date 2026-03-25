@@ -233,18 +233,12 @@ export default function AdminDashboard() {
       const score = total > 0 ? Math.round((correct / total) * 100) : 0;
 
       const resultRef = doc(db, "users", res.studentId, "results", res.id);
-      updateDoc(resultRef, {
+      await updateDoc(resultRef, {
         score,
         correctCount: correct,
         totalQuestions: total,
-        correctAnswers: answerKey, // Save full answer key for student review
+        correctAnswers: answerKey, // Store the full answer key for student review
         gradedAt: serverTimestamp()
-      }).catch(async (e) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: resultRef.path,
-          operation: 'update',
-          requestResourceData: { score, correctCount: correct, totalQuestions: total }
-        }));
       });
 
       toast({ title: "Grading Finalized", description: `Computed score: ${correct}/${total} (${score}%)` });
@@ -286,17 +280,12 @@ export default function AdminDashboard() {
           }
           const score = total > 0 ? Math.round((correct / total) * 100) : 0;
           const resultRef = doc(db, "users", res.studentId, "results", res.id);
-          updateDoc(resultRef, {
+          await updateDoc(resultRef, {
             score,
             correctCount: correct,
             totalQuestions: total,
-            correctAnswers: answerKey, // Save full answer key for student review
+            correctAnswers: answerKey, // Store the full answer key for student review
             gradedAt: serverTimestamp()
-          }).catch(async (e) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-              path: resultRef.path,
-              operation: 'update'
-            }));
           });
           successCount++;
         }
@@ -426,7 +415,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleSaveExam = (e: React.MouseEvent, status: "draft" | "published") => {
+  const handleSaveExam = async (e: React.MouseEvent, status: "draft" | "published") => {
     e.preventDefault()
     if (!user) return
     if (!newExam.title || examQuestions.length === 0) {
@@ -437,54 +426,47 @@ export default function AdminDashboard() {
     const examId = editingExamId || doc(collection(db, "exams")).id
     const examRef = doc(db, "exams", examId)
 
-    setDoc(examRef, {
-      ...newExam,
-      id: examId,
-      status: status,
-      createdBy: user.uid,
-      updatedAt: serverTimestamp(),
-      ...(editingExamId ? {} : { createdAt: serverTimestamp() })
-    }, { merge: true }).catch(async (e) => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: examRef.path,
-        operation: 'write'
-      }));
-    });
+    try {
+      await setDoc(examRef, {
+        ...newExam,
+        id: examId,
+        status: status,
+        createdBy: user.uid,
+        updatedAt: serverTimestamp(),
+        ...(editingExamId ? {} : { createdAt: serverTimestamp() })
+      }, { merge: true });
 
-    // Save questions and answers
-    examQuestions.forEach(q => {
-      const qId = q.id.startsWith('q-') ? doc(collection(db, `exams/${examId}/questions`)).id : q.id
-      const publicQRef = doc(db, `exams/${examId}/questions`, qId)
-      const privateARef = doc(db, `exams/${examId}/answers`, qId)
+      // Save questions and answers atomically using stable IDs
+      const batch = writeBatch(db);
+      examQuestions.forEach(q => {
+        // Ensure the ID is stable for both public and private collections
+        const qId = q.id.startsWith('q-') ? doc(collection(db, `exams/${examId}/questions`)).id : q.id
+        const publicQRef = doc(db, `exams/${examId}/questions`, qId)
+        const privateARef = doc(db, `exams/${examId}/answers`, qId)
 
-      setDoc(publicQRef, {
-        id: qId,
-        examId,
-        questionText: q.questionText,
-        options: q.options
-      }, { merge: true }).catch(async (e) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: publicQRef.path,
-          operation: 'write'
-        }));
+        batch.set(publicQRef, {
+          id: qId,
+          examId,
+          questionText: q.questionText,
+          options: q.options
+        }, { merge: true });
+
+        batch.set(privateARef, {
+          id: qId,
+          correctOptionIndex: q.correctOptionIndex
+        }, { merge: true });
       });
 
-      setDoc(privateARef, {
-        id: qId,
-        correctOptionIndex: q.correctOptionIndex
-      }, { merge: true }).catch(async (e) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: privateARef.path,
-          operation: 'write'
-        }));
-      });
-    })
-
-    toast({ title: "Success", description: status === 'published' ? "Assessment published." : "Draft saved successfully." })
-    setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70, status: "draft" })
-    setExamQuestions([])
-    setEditingExamId(null)
-    setActiveTab("exams")
+      await batch.commit();
+      
+      toast({ title: "Success", description: status === 'published' ? "Assessment published." : "Draft saved successfully." })
+      setNewExam({ title: "", description: "", timeLimitMinutes: 30, passingScore: 70, status: "draft" })
+      setExamQuestions([])
+      setEditingExamId(null)
+      setActiveTab("exams")
+    } catch (e: any) {
+      toast({ title: "Save Error", description: e.message, variant: "destructive" })
+    }
   }
 
   const handleProvisionUser = async (e: React.FormEvent) => {
@@ -495,30 +477,20 @@ export default function AdminDashboard() {
       const newUser = userCredential.user
 
       const userRef = doc(db, "users", newUser.uid)
-      setDoc(userRef, {
+      await setDoc(userRef, {
         id: newUser.uid,
         email: newUser.email,
         username: newStudent.username,
         role: newStudent.role,
         createdAt: serverTimestamp()
-      }).catch(async (e) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: userRef.path,
-          operation: 'write'
-        }));
       });
 
       if (newStudent.role === 'admin') {
         const adminRef = doc(db, "admin_roles", newUser.uid)
-        setDoc(adminRef, {
+        await setDoc(adminRef, {
           uid: newUser.uid,
           createdAt: serverTimestamp()
-        }).catch(async (e) => {
-          errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: adminRef.path,
-            operation: 'write'
-          }));
-        });
+        }, { merge: true });
       }
 
       toast({ title: "User Provisioned", description: `Account created for ${newStudent.username}.` })
@@ -538,33 +510,18 @@ export default function AdminDashboard() {
     const adminMarkerRef = doc(db, "admin_roles", editingUser.id)
 
     try {
-      updateDoc(userRef, {
+      await updateDoc(userRef, {
         username: editingUser.username,
         role: editingUser.role
-      }).catch(async (e) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: userRef.path,
-          operation: 'update'
-        }));
       });
 
       if (editingUser.role === 'admin') {
-        setDoc(adminMarkerRef, {
+        await setDoc(adminMarkerRef, {
           uid: editingUser.id,
           createdAt: serverTimestamp()
-        }, { merge: true }).catch(async (e) => {
-          errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: adminMarkerRef.path,
-            operation: 'write'
-          }));
-        });
+        }, { merge: true });
       } else {
-        deleteDoc(adminMarkerRef).catch(async (e) => {
-          errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: adminMarkerRef.path,
-            operation: 'delete'
-          }));
-        });
+        await deleteDoc(adminMarkerRef);
       }
 
       toast({ title: "User Updated", description: "The system roster has been synchronized." })
@@ -574,12 +531,14 @@ export default function AdminDashboard() {
     }
   }
 
-  const filteredUsers = allUsers?.filter(u => {
-    const matchesSearch = (u.username?.toLowerCase() || "").includes(userSearch.toLowerCase()) || 
-                          (u.email?.toLowerCase() || "").includes(userSearch.toLowerCase())
-    const matchesRole = roleFilter === "all" || u.role === roleFilter
-    return matchesSearch && matchesRole
-  })
+  const filteredUsers = useMemo(() => {
+    return allUsers?.filter(u => {
+      const matchesSearch = (u.username?.toLowerCase() || "").includes(userSearch.toLowerCase()) || 
+                            (u.email?.toLowerCase() || "").includes(userSearch.toLowerCase())
+      const matchesRole = roleFilter === "all" || u.role === roleFilter
+      return matchesSearch && matchesRole
+    })
+  }, [allUsers, userSearch, roleFilter])
 
   const filteredResults = useMemo(() => {
     return results?.filter(res => {
