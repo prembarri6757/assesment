@@ -542,7 +542,6 @@ export default function AdminDashboard() {
   const filteredResults = useMemo(() => {
     return results?.filter(res => {
       const matchesSearch = (res.studentEmail?.toLowerCase() || "").includes(auditSearch.toLowerCase()) || 
-                            (res.studentUsername?.toLowerCase() || "").includes(auditSearch.toLowerCase()) ||
                             (res.examTitle?.toLowerCase() || "").includes(auditSearch.toLowerCase())
       const matchesExam = auditExamFilter === "all" || res.examTitle === auditExamFilter
       const matchesStatus = auditStatusFilter === "all" || res.integrityStatus === auditStatusFilter
@@ -561,7 +560,7 @@ export default function AdminDashboard() {
   const handleDownloadCSV = () => {
     if (!filteredResults || filteredResults.length === 0) return;
 
-    const headers = ["Student Name", "Student Email", "Exam Title", "Date", "Score", "Marks", "Outcome", "Integrity Status"];
+    const headers = ["Student Email", "Exam Title", "Date", "Score", "Marks", "Outcome", "Integrity Status"];
     const rows = filteredResults.map(res => {
       const examData = exams?.find(e => e.id === res.examId);
       const isGraded = res.score !== undefined;
@@ -572,7 +571,6 @@ export default function AdminDashboard() {
       const marks = res.correctCount !== undefined ? `${res.correctCount}/${res.totalQuestions}` : "N/A";
       
       return [
-        res.studentUsername || "N/A",
         res.studentEmail,
         `"${res.examTitle}"`,
         dateStr,
@@ -604,7 +602,7 @@ export default function AdminDashboard() {
     const content = `
 ASSESSMENT RESULT EXPORT
 ------------------------
-Student: ${res.studentUsername || 'N/A'} (${res.studentEmail})
+Student: ${res.studentEmail}
 Exam: ${res.examTitle}
 Date: ${dateStr}
 Integrity Status: ${res.integrityStatus}
@@ -1196,10 +1194,7 @@ Exam ID: ${res.examId}
                               />
                             </TableCell>
                             <TableCell className="font-medium">
-                              <div className="flex flex-col">
-                                <span className="font-bold">{res.studentUsername || 'N/A'}</span>
-                                <span className="text-[10px] text-muted-foreground">{res.studentEmail}</span>
-                              </div>
+                              <span className="text-sm">{res.studentEmail}</span>
                             </TableCell>
                             <TableCell>{res.examTitle}</TableCell>
                             <TableCell className="whitespace-nowrap">
