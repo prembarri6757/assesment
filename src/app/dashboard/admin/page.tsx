@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useScrollReveal } from "@/hooks/use-scroll-reveal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -38,7 +38,8 @@ import {
   Calendar,
   CheckCircle2,
   XCircle,
-  Download
+  Download,
+  Upload
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs, updateDoc, writeBatch } from "firebase/firestore"
@@ -57,6 +58,7 @@ import { signOut, createUserWithEmailAndPassword } from "firebase/auth"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
 import { format } from "date-fns"
+import Papa from "papaparse"
 import {
   Dialog,
   DialogContent,
@@ -90,6 +92,7 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser()
   const { toast } = useToast()
   const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   const [mounted, setMounted] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
@@ -311,6 +314,46 @@ export default function AdminDashboard() {
     } finally {
       setIsGenerating(false)
     }
+  }
+
+  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const parsedQuestions = results.data.map((row: any) => {
+          const options = [
+            row.option1 || row.Option1 || row['Option 1'],
+            row.option2 || row.Option2 || row['Option 2'],
+            row.option3 || row.Option3 || row['Option 3'],
+            row.option4 || row.Option4 || row['Option 4'],
+          ].filter(Boolean)
+
+          return {
+            id: "q-" + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            questionText: row.questionText || row.Question || row.text || "Untitled Question",
+            options: options.length >= 2 ? options : ["", "", "", ""],
+            correctOptionIndex: parseInt(row.correctIndex || row.correctOptionIndex || row['Correct Index']) || 0
+          }
+        })
+
+        if (parsedQuestions.length > 0) {
+          setExamQuestions(prev => [...prev, ...parsedQuestions])
+          toast({ title: "Import Successful", description: `Added ${parsedQuestions.length} questions from CSV.` })
+        } else {
+          toast({ title: "Import Failed", description: "No valid questions found in CSV. Check your headers (questionText, option1, option2, option3, option4, correctIndex).", variant: "destructive" })
+        }
+      },
+      error: (err) => {
+        toast({ title: "CSV Parsing Error", description: err.message, variant: "destructive" })
+      }
+    })
+    
+    // Clear input
+    if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
   const addQuestion = (q?: any) => {
@@ -854,7 +897,7 @@ Exam ID: ${res.examId}
             <div className="max-w-4xl mx-auto space-y-8">
                <div className="space-y-2">
                  <h2 className="text-3xl font-bold">{editingExamId ? "Update Assessment" : "Exam Builder"}</h2>
-                 <p className="text-muted-foreground">Author secure multiple-choice assessments with AI assistance.</p>
+                 <p className="text-muted-foreground">Author secure multiple-choice assessments with AI assistance or bulk CSV upload.</p>
                </div>
 
                {isLoadingExam ? (
@@ -888,6 +931,18 @@ Exam ID: ${res.examId}
                    <div className="space-y-4">
                      <div className="flex items-center justify-between">
                        <h3 className="text-xl font-bold">Questions</h3>
+                       <div className="flex gap-2">
+                          <Input 
+                            type="file" 
+                            accept=".csv" 
+                            className="hidden" 
+                            ref={fileInputRef} 
+                            onChange={handleCsvUpload} 
+                          />
+                          <Button variant="outline" className="gap-2" onClick={() => fileInputRef.current?.click()}>
+                            <Upload className="w-4 h-4" /> Import CSV
+                          </Button>
+                       </div>
                      </div>
 
                      <div className="space-y-6 pb-24">
@@ -1018,7 +1073,7 @@ Exam ID: ${res.examId}
                         placeholder="Search by name or email..." 
                         className="pl-10" 
                         value={userSearch} 
-                        onChange={(e) => setUserSearch(e.target.value)} 
+                        onChange={(e) => userSearch(e.target.value)} 
                       />
                     </div>
                     <div className="flex items-center gap-2 w-full md:w-auto">
