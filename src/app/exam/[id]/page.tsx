@@ -12,7 +12,7 @@ import { AlertCircle, ShieldAlert, CheckCircle2, Lock, Loader2 } from "lucide-re
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { useFirestore, useUser, useDoc, useCollection, useMemoFirebase } from "@/firebase"
-import { doc, setDoc, serverTimestamp, collection } from "firebase/firestore"
+import { doc, setDoc, serverTimestamp, collection, getDoc } from "firebase/firestore"
 
 export default function ExamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -68,6 +68,12 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       return
     }
 
+    // Fetch user profile to get username
+    const userDocRef = doc(db, "users", user.uid)
+    const userSnap = await getDoc(userDocRef)
+    const userData = userSnap.data()
+    const studentUsername = userData?.username || user.email?.split('@')[0] || "Scholar"
+
     // RANDOMIZE questions for this specific session
     setShuffledQuestions(shuffleQuestions(rawQuestions))
 
@@ -80,6 +86,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       id: newResultId,
       studentId: user.uid,
       studentEmail: user.email,
+      studentUsername: studentUsername,
       examId: exam.id,
       examTitle: exam.title,
       startedAt: serverTimestamp(),
