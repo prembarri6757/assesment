@@ -28,11 +28,13 @@ import {
   Eye,
   Check,
   X,
-  Sparkles
+  Sparkles,
+  Settings,
+  Save
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, doc, query, where, getDocs } from "firebase/firestore"
+import { collection, doc, query, where, getDocs, updateDoc } from "firebase/firestore"
 import { useAuth } from "@/firebase"
 import { signOut } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
@@ -45,7 +47,10 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 
 export default function StudentDashboard() {
   const containerRef = useScrollReveal()
@@ -60,6 +65,11 @@ export default function StudentDashboard() {
   const [reviewResult, setReviewResult] = useState<any>(null)
   const [reviewQuestions, setReviewQuestions] = useState<any[]>([])
   const [loadingReview, setLoadingReview] = useState(false)
+  
+  // Profile Editing State
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [newUsername, setNewUsername] = useState("")
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -70,6 +80,12 @@ export default function StudentDashboard() {
     return doc(db, "users", user.uid)
   }, [db, user])
   const { data: userProfile, isLoading: profileLoading } = useDoc(userDocRef)
+
+  useEffect(() => {
+    if (userProfile?.username) {
+      setNewUsername(userProfile.username)
+    }
+  }, [userProfile])
 
   const examsQuery = useMemoFirebase(() => {
     if (!user) return null
@@ -95,6 +111,25 @@ export default function StudentDashboard() {
   const handleLogout = async () => {
     await signOut(auth)
     router.push('/')
+  }
+
+  const handleUpdateUsername = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || !newUsername.trim()) return
+    
+    setIsUpdatingProfile(true)
+    try {
+      const userRef = doc(db, "users", user.uid)
+      await updateDoc(userRef, {
+        username: newUsername.trim()
+      })
+      toast({ title: "Profile Updated", description: "Your username has been successfully synchronized." })
+      setIsEditingProfile(false)
+    } catch (e: any) {
+      toast({ title: "Update Error", description: e.message, variant: "destructive" })
+    } finally {
+      setIsUpdatingProfile(false)
+    }
   }
 
   const handleReview = async (res: any) => {
@@ -151,9 +186,39 @@ export default function StudentDashboard() {
             <span className="font-bold text-xl tracking-tight hidden sm:inline">Student Gateway</span>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/10 text-xs font-bold text-primary">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/10 text-xs font-bold text-primary group transition-all">
               <CircleUser className="w-4 h-4" />
               <span>{displayName}</span>
+              <Dialog open={isEditingProfile} onOpenChange={setIsEditingProfile}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 ml-2 rounded-full hover:bg-primary/10">
+                    <Settings className="w-3 h-3 text-primary/60" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="rounded-[2.5rem]">
+                  <DialogHeader>
+                    <DialogTitle>Edit Identity</DialogTitle>
+                    <DialogDescription>Update your display name across the assessment gateway.</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleUpdateUsername} className="space-y-4 pt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username / Display Name</Label>
+                      <Input 
+                        id="username" 
+                        value={newUsername} 
+                        onChange={(e) => setNewUsername(e.target.value)}
+                        placeholder="e.g. John Doe"
+                        className="rounded-xl h-12"
+                        required
+                      />
+                    </div>
+                    <Button type="submit" className="w-full h-12 rounded-xl gap-2" disabled={isUpdatingProfile}>
+                      {isUpdatingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Update Identity
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </div>
             <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-xl">
               <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Logout</span>
