@@ -96,6 +96,7 @@ export default function StudentDashboard() {
 
   const handleReview = async (res: any) => {
     setReviewResult(res)
+    setReviewQuestions([]) // Clear previous questions
     setLoadingReview(true)
     try {
       const qRef = collection(db, `exams/${res.examId}/questions`)
@@ -103,7 +104,7 @@ export default function StudentDashboard() {
       const qs = qSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
       setReviewQuestions(qs)
     } catch (e: any) {
-      toast({ title: "Review Error", description: "Could not fetch questions for review.", variant: "destructive" })
+      toast({ title: "Review Error", description: "Could not fetch assessment questions for review.", variant: "destructive" })
     } finally {
       setLoadingReview(false)
     }
@@ -315,7 +316,7 @@ export default function StudentDashboard() {
               <Sparkles className="w-6 h-6 text-primary" /> Session Review
             </DialogTitle>
             <DialogDescription>
-              Detailed breakdown of your performance for <strong>{reviewResult?.examTitle}</strong>.
+              Detailed breakdown of your performance for <strong>{reviewResult?.examTitle}</strong>. All questions are displayed below with correct answers.
             </DialogDescription>
           </DialogHeader>
           
@@ -331,6 +332,7 @@ export default function StudentDashboard() {
                   const studentChoice = reviewResult?.responses?.[q.id];
                   const correctChoice = reviewResult?.correctAnswers?.[q.id];
                   const isCorrect = studentChoice === correctChoice;
+                  const isSkipped = studentChoice === undefined;
 
                   return (
                     <Card key={q.id} className={cn(
@@ -344,8 +346,8 @@ export default function StudentDashboard() {
                             "rounded-lg px-3 py-1 text-[10px] font-black uppercase tracking-widest gap-1",
                             isCorrect ? "bg-emerald-500" : ""
                           )}>
-                            {isCorrect ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                            {isCorrect ? 'Correct' : 'Incorrect'}
+                            {isCorrect ? <Check className="w-3 h-3" /> : (isSkipped ? <AlertTriangle className="w-3 h-3" /> : <X className="w-3 h-3" />)}
+                            {isCorrect ? 'Correct' : (isSkipped ? 'Skipped' : 'Incorrect')}
                           </Badge>
                         </div>
                         <CardTitle className="text-lg font-bold">{q.questionText}</CardTitle>
@@ -360,7 +362,7 @@ export default function StudentDashboard() {
                               key={oIdx} 
                               className={cn(
                                 "flex items-center gap-4 p-4 rounded-2xl border transition-all",
-                                isCorrectOption ? "bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20" : "bg-background border-border/50",
+                                isCorrectOption ? "bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20 shadow-sm" : "bg-background border-border/50",
                                 isStudentOption && !isCorrectOption ? "bg-destructive/10 border-destructive/30 ring-1 ring-destructive/20" : ""
                               )}
                             >
@@ -387,6 +389,11 @@ export default function StudentDashboard() {
                     </Card>
                   );
                 })}
+                {reviewQuestions.length === 0 && (
+                  <div className="py-20 text-center text-muted-foreground italic">
+                    No questions found for this assessment.
+                  </div>
+                )}
               </div>
             )}
           </ScrollArea>

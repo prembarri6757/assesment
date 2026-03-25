@@ -237,7 +237,7 @@ export default function AdminDashboard() {
         score,
         correctCount: correct,
         totalQuestions: total,
-        correctAnswers: answerKey,
+        correctAnswers: answerKey, // Save full answer key for student review
         gradedAt: serverTimestamp()
       }).catch(async (e) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -290,7 +290,7 @@ export default function AdminDashboard() {
             score,
             correctCount: correct,
             totalQuestions: total,
-            correctAnswers: answerKey,
+            correctAnswers: answerKey, // Save full answer key for student review
             gradedAt: serverTimestamp()
           }).catch(async (e) => {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -672,6 +672,11 @@ Exam ID: ${res.examId}
     document.body.removeChild(link);
   };
 
+  const getSafeDate = (dateVal: any) => {
+    if (!dateVal) return null;
+    return dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
+  }
+
   if (isUserLoading || adminRoleLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -700,11 +705,6 @@ Exam ID: ${res.examId}
     { id: "students", label: "User Management", icon: UserCog },
     { id: "audit", label: "Audit Logs", icon: History },
   ]
-
-  const getSafeDate = (dateVal: any) => {
-    if (!dateVal) return null;
-    return dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
-  }
 
   return (
     <div ref={containerRef} className="min-h-screen bg-background flex">
