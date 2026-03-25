@@ -91,6 +91,7 @@ export default function AdminDashboard() {
   const { toast } = useToast()
   const router = useRouter()
   
+  const [mounted, setMounted] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -125,6 +126,10 @@ export default function AdminDashboard() {
   const [auditSearch, setAuditSearch] = useState("")
   const [auditExamFilter, setAuditExamFilter] = useState<string>("all")
   const [auditStatusFilter, setAuditStatusFilter] = useState<string>("all")
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const adminRoleRef = useMemoFirebase(() => {
     if (!user) return null
@@ -338,7 +343,7 @@ export default function AdminDashboard() {
   const removeOption = (qId: string, oIdx: number) => {
     setExamQuestions(prev => prev.map(q => {
       if (q.id === qId && q.options.length > 2) {
-        const newOptions = q.options.filter((_: any, i: number) => i !== oIdx)
+        const newOptions = q.options.filter((_: any, i: number = 0) => i !== oIdx)
         const newCorrectIndex = q.correctOptionIndex >= oIdx ? Math.max(0, q.correctOptionIndex - 1) : q.correctOptionIndex
         return { ...q, options: newOptions, correctOptionIndex: newCorrectIndex }
       }
@@ -434,7 +439,6 @@ export default function AdminDashboard() {
 
       const batch = writeBatch(db);
       examQuestions.forEach(q => {
-        // Use the existing ID to prevent duplicates/orphans in the vault
         const qId = q.id;
         const publicQRef = doc(db, `exams/${examId}/questions`, qId)
         const privateARef = doc(db, `exams/${examId}/answers`, qId)
@@ -628,12 +632,14 @@ Exam ID: ${res.examId}
 
   const getSafeDate = (dateVal: any) => {
     if (!dateVal) return null;
-    return dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
+    if (dateVal.toDate) return dateVal.toDate();
+    const d = new Date(dateVal);
+    return isNaN(d.getTime()) ? null : d;
   }
 
-  if (isUserLoading || adminRoleLoading) {
+  if (isUserLoading || adminRoleLoading || !mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-background" suppressHydrationWarning>
         <Loader2 className="w-12 h-12 text-primary animate-spin" />
       </div>
     )

@@ -55,10 +55,15 @@ export default function StudentDashboard() {
   const { user, isUserLoading } = useUser()
   const { toast } = useToast()
 
+  const [mounted, setMounted] = useState(false)
   const [activeTab, setActiveTab] = useState("exams")
   const [reviewResult, setReviewResult] = useState<any>(null)
   const [reviewQuestions, setReviewQuestions] = useState<any[]>([])
   const [loadingReview, setLoadingReview] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null
@@ -68,7 +73,6 @@ export default function StudentDashboard() {
 
   const examsQuery = useMemoFirebase(() => {
     if (!user) return null
-    // Only show published exams to students
     return query(collection(db, "exams"), where("status", "==", "published"))
   }, [db, user])
   const { data: exams, isLoading: examsLoading } = useCollection(examsQuery)
@@ -111,7 +115,9 @@ export default function StudentDashboard() {
 
   const getSafeDate = (dateVal: any) => {
     if (!dateVal) return null;
-    return dateVal.toDate ? dateVal.toDate() : new Date(dateVal);
+    if (dateVal.toDate) return dateVal.toDate();
+    const d = new Date(dateVal);
+    return isNaN(d.getTime()) ? null : d;
   }
 
   const stats = {
@@ -123,9 +129,9 @@ export default function StudentDashboard() {
     flags: results?.filter(r => r.integrityStatus === 'Flagged').length || 0
   }
 
-  if (isUserLoading || profileLoading) {
+  if (isUserLoading || profileLoading || !mounted) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4" suppressHydrationWarning>
         <Loader2 className="w-10 h-10 text-primary animate-spin" />
         <p className="text-muted-foreground font-medium">Verifying Session...</p>
       </div>
@@ -273,7 +279,9 @@ export default function StudentDashboard() {
                               )}
                               <div className="flex items-center gap-1 text-muted-foreground">
                                 <Calendar className="w-3 h-3" />
-                                <span className="text-[10px] uppercase font-bold">{attemptDate ? format(attemptDate, 'MMM dd, yyyy @ hh:mm a') : 'Unknown Date'}</span>
+                                <span className="text-[10px] uppercase font-bold">
+                                  {attemptDate ? format(attemptDate, 'MMM dd, yyyy @ hh:mm a') : 'Unknown Date'}
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -318,7 +326,7 @@ export default function StudentDashboard() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-8 space-y-8 min-h-0">
             {loadingReview ? (
               <div className="py-20 flex flex-col items-center justify-center gap-4">
                 <Loader2 className="w-10 h-10 animate-spin text-primary" />
