@@ -237,6 +237,7 @@ export default function AdminDashboard() {
         score,
         correctCount: correct,
         totalQuestions: total,
+        correctAnswers: answerKey,
         gradedAt: serverTimestamp()
       }).catch(async (e) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -289,6 +290,7 @@ export default function AdminDashboard() {
             score,
             correctCount: correct,
             totalQuestions: total,
+            correctAnswers: answerKey,
             gradedAt: serverTimestamp()
           }).catch(async (e) => {
             errorEmitter.emit('permission-error', new FirestorePermissionError({

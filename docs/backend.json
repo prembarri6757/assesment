@@ -72,7 +72,8 @@
         "startedAt": { "type": "string", "format": "date-time" },
         "completedAt": { "type": "string", "format": "date-time" },
         "integrityStatus": { "type": "string" },
-        "responses": { "type": "object", "description": "Map of questionId to selected option index" }
+        "responses": { "type": "object", "description": "Map of questionId to selected option index" },
+        "correctAnswers": { "type": "object", "description": "Map of questionId to correct option index (stored after grading)" }
       },
       "required": ["id", "studentId", "examId", "startedAt", "integrityStatus"]
     }

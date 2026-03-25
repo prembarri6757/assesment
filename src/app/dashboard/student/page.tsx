@@ -24,17 +24,28 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  Calendar
+  Calendar,
+  Eye,
+  Check,
+  X
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, doc, query, where } from "firebase/firestore"
+import { collection, doc, query, where, getDocs } from "firebase/firestore"
 import { useAuth } from "@/firebase"
 import { signOut } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export default function StudentDashboard() {
   const containerRef = useScrollReveal()
@@ -45,6 +56,9 @@ export default function StudentDashboard() {
   const { toast } = useToast()
 
   const [activeTab, setActiveTab] = useState("exams")
+  const [reviewResult, setReviewResult] = useState<any>(null)
+  const [reviewQuestions, setReviewQuestions] = useState<any[]>([])
+  const [loadingReview, setLoadingReview] = useState(false)
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null
@@ -77,6 +91,21 @@ export default function StudentDashboard() {
   const handleLogout = async () => {
     await signOut(auth)
     router.push('/')
+  }
+
+  const handleReview = async (res: any) => {
+    setReviewResult(res)
+    setLoadingReview(true)
+    try {
+      const qRef = collection(db, `exams/${res.examId}/questions`)
+      const qSnap = await getDocs(qRef)
+      const qs = qSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      setReviewQuestions(qs)
+    } catch (e: any) {
+      toast({ title: "Review Error", description: "Could not fetch questions for review.", variant: "destructive" })
+    } finally {
+      setLoadingReview(false)
+    }
   }
 
   const getSafeDate = (dateVal: any) => {
@@ -224,8 +253,8 @@ export default function StudentDashboard() {
                       const attemptDate = getSafeDate(res.startedAt);
 
                       return (
-                        <div key={res.id} className="p-10 flex items-center justify-between hover:bg-muted/30 transition-all">
-                          <div className="space-y-3">
+                        <div key={res.id} className="p-10 flex flex-col md:flex-row md:items-center justify-between hover:bg-muted/30 transition-all gap-6">
+                          <div className="space-y-3 flex-1">
                             <p className="font-bold text-xl">{res.examTitle}</p>
                             <div className="flex items-center gap-4 flex-wrap">
                               <Badge variant={res.integrityStatus === 'Clean' ? 'outline' : 'destructive'} className="text-[10px] px-4 py-1 font-black uppercase tracking-widest rounded-full">
@@ -248,9 +277,19 @@ export default function StudentDashboard() {
                               </div>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-5xl font-black text-primary">{res.score || 0}%</p>
-                            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-2">Calculated Score</p>
+                          <div className="flex items-center gap-6">
+                            <div className="text-right">
+                              <p className="text-5xl font-black text-primary">{res.score || 0}%</p>
+                              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-2">Calculated Score</p>
+                            </div>
+                            <Button 
+                              variant="outline" 
+                              className="rounded-2xl gap-2 h-14 px-6 border-primary/20 hover:bg-primary/5 hover:border-primary/40"
+                              onClick={() => handleReview(res)}
+                              disabled={!res.correctAnswers}
+                            >
+                              <Eye className="w-4 h-4" /> Review
+                            </Button>
                           </div>
                         </div>
                       );
@@ -267,6 +306,95 @@ export default function StudentDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <Dialog open={!!reviewResult} onOpenChange={(open) => !open && setReviewResult(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-[2.5rem]">
+          <DialogHeader className="p-8 border-b bg-muted/20">
+            <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+              <Sparkles className="w-6 h-6 text-primary" /> Session Review
+            </DialogTitle>
+            <DialogDescription>
+              Detailed breakdown of your performance for <strong>{reviewResult?.examTitle}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 p-8">
+            {loadingReview ? (
+              <div className="py-20 flex flex-col items-center justify-center gap-4">
+                <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                <p className="text-muted-foreground font-bold">Fetching secure assessment data...</p>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {reviewQuestions.map((q, idx) => {
+                  const studentChoice = reviewResult?.responses?.[q.id];
+                  const correctChoice = reviewResult?.correctAnswers?.[q.id];
+                  const isCorrect = studentChoice === correctChoice;
+
+                  return (
+                    <Card key={q.id} className={cn(
+                      "border-none shadow-sm rounded-3xl overflow-hidden",
+                      isCorrect ? "bg-emerald-500/5 ring-1 ring-emerald-500/20" : "bg-destructive/5 ring-1 ring-destructive/20"
+                    )}>
+                      <CardHeader className="p-6">
+                        <div className="flex items-center justify-between mb-2">
+                          <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest">Question {idx + 1}</Badge>
+                          <Badge variant={isCorrect ? 'default' : 'destructive'} className={cn(
+                            "rounded-lg px-3 py-1 text-[10px] font-black uppercase tracking-widest gap-1",
+                            isCorrect ? "bg-emerald-500" : ""
+                          )}>
+                            {isCorrect ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                            {isCorrect ? 'Correct' : 'Incorrect'}
+                          </Badge>
+                        </div>
+                        <CardTitle className="text-lg font-bold">{q.questionText}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-6 pt-0 space-y-3">
+                        {q.options.map((opt: string, oIdx: number) => {
+                          const isStudentOption = studentChoice === oIdx;
+                          const isCorrectOption = correctChoice === oIdx;
+
+                          return (
+                            <div 
+                              key={oIdx} 
+                              className={cn(
+                                "flex items-center gap-4 p-4 rounded-2xl border transition-all",
+                                isCorrectOption ? "bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20" : "bg-background border-border/50",
+                                isStudentOption && !isCorrectOption ? "bg-destructive/10 border-destructive/30 ring-1 ring-destructive/20" : ""
+                              )}
+                            >
+                              <div className={cn(
+                                "w-8 h-8 rounded-full flex items-center justify-center font-black text-xs",
+                                isCorrectOption ? "bg-emerald-500 text-white" : 
+                                isStudentOption ? "bg-destructive text-white" : "bg-muted text-muted-foreground"
+                              )}>
+                                {String.fromCharCode(65 + oIdx)}
+                              </div>
+                              <span className={cn(
+                                "flex-1 text-sm font-medium",
+                                isCorrectOption ? "text-emerald-700 font-bold" : 
+                                isStudentOption ? "text-destructive font-bold" : "text-foreground/70"
+                              )}>
+                                {opt}
+                              </span>
+                              {isCorrectOption && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+                              {isStudentOption && !isCorrectOption && <XCircle className="w-5 h-5 text-destructive" />}
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+          
+          <div className="p-8 border-t bg-muted/20 flex justify-end">
+            <Button className="px-8 rounded-2xl" onClick={() => setReviewResult(null)}>Close Review</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
