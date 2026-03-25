@@ -106,10 +106,8 @@ export default function AdminDashboard() {
   const [isGrading, setIsGrading] = useState<string | null>(null)
   const [isGradingAll, setIsGradingAll] = useState(false)
 
-  // Selection state for Audit Logs
   const [selectedLogs, setSelectedLogs] = useState<string[]>([])
 
-  // Builder State
   const [editingExamId, setEditingExamId] = useState<string | null>(null)
   const [isLoadingExam, setIsLoadingExam] = useState(false)
   const [newExam, setNewExam] = useState({
@@ -121,11 +119,9 @@ export default function AdminDashboard() {
   })
   const [examQuestions, setExamQuestions] = useState<any[]>([])
 
-  // Filter State - Users
   const [userSearch, setUserSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState<string>("all")
 
-  // Filter State - Audit Logs
   const [auditSearch, setAuditSearch] = useState("")
   const [auditExamFilter, setAuditExamFilter] = useState<string>("all")
   const [auditStatusFilter, setAuditStatusFilter] = useState<string>("all")
@@ -237,7 +233,7 @@ export default function AdminDashboard() {
         score,
         correctCount: correct,
         totalQuestions: total,
-        correctAnswers: answerKey, // Store the full answer key for student review
+        correctAnswers: answerKey, 
         gradedAt: serverTimestamp()
       });
 
@@ -284,7 +280,7 @@ export default function AdminDashboard() {
             score,
             correctCount: correct,
             totalQuestions: total,
-            correctAnswers: answerKey, // Store the full answer key for student review
+            correctAnswers: answerKey, 
             gradedAt: serverTimestamp()
           });
           successCount++;
@@ -436,11 +432,10 @@ export default function AdminDashboard() {
         ...(editingExamId ? {} : { createdAt: serverTimestamp() })
       }, { merge: true });
 
-      // Save questions and answers atomically using stable IDs
       const batch = writeBatch(db);
       examQuestions.forEach(q => {
-        // Ensure the ID is stable for both public and private collections
-        const qId = q.id.startsWith('q-') ? doc(collection(db, `exams/${examId}/questions`)).id : q.id
+        // Use the existing ID to prevent duplicates/orphans in the vault
+        const qId = q.id;
         const publicQRef = doc(db, `exams/${examId}/questions`, qId)
         const privateARef = doc(db, `exams/${examId}/answers`, qId)
 
