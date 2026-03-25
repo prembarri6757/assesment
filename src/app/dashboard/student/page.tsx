@@ -311,7 +311,7 @@ export default function StudentDashboard() {
 
       <Dialog open={!!reviewResult} onOpenChange={(open) => !open && setReviewResult(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-[2.5rem]">
-          <DialogHeader className="p-8 border-b bg-muted/20">
+          <DialogHeader className="p-8 border-b bg-muted/20 shrink-0">
             <DialogTitle className="text-2xl font-bold flex items-center gap-3">
               <Sparkles className="w-6 h-6 text-primary" /> Session Review
             </DialogTitle>
@@ -320,85 +320,87 @@ export default function StudentDashboard() {
             </DialogDescription>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 p-8">
-            {loadingReview ? (
-              <div className="py-20 flex flex-col items-center justify-center gap-4">
-                <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                <p className="text-muted-foreground font-bold">Fetching secure assessment data...</p>
-              </div>
-            ) : (
-              <div className="space-y-8">
-                {reviewQuestions.map((q, idx) => {
-                  const studentChoice = reviewResult?.responses?.[q.id];
-                  const correctChoice = reviewResult?.correctAnswers?.[q.id];
-                  const isCorrect = studentChoice === correctChoice;
-                  const isSkipped = studentChoice === undefined;
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="p-8 space-y-8">
+              {loadingReview ? (
+                <div className="py-20 flex flex-col items-center justify-center gap-4">
+                  <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                  <p className="text-muted-foreground font-bold">Fetching secure assessment data...</p>
+                </div>
+              ) : (
+                <>
+                  {reviewQuestions.map((q, idx) => {
+                    const studentChoice = reviewResult?.responses?.[q.id];
+                    const correctChoice = reviewResult?.correctAnswers?.[q.id];
+                    const isCorrect = studentChoice === correctChoice;
+                    const isSkipped = studentChoice === undefined;
 
-                  return (
-                    <Card key={q.id} className={cn(
-                      "border-none shadow-sm rounded-3xl overflow-hidden",
-                      isCorrect ? "bg-emerald-500/5 ring-1 ring-emerald-500/20" : "bg-destructive/5 ring-1 ring-destructive/20"
-                    )}>
-                      <CardHeader className="p-6">
-                        <div className="flex items-center justify-between mb-2">
-                          <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest">Question {idx + 1}</Badge>
-                          <Badge variant={isCorrect ? 'default' : 'destructive'} className={cn(
-                            "rounded-lg px-3 py-1 text-[10px] font-black uppercase tracking-widest gap-1",
-                            isCorrect ? "bg-emerald-500" : ""
-                          )}>
-                            {isCorrect ? <Check className="w-3 h-3" /> : (isSkipped ? <AlertTriangle className="w-3 h-3" /> : <X className="w-3 h-3" />)}
-                            {isCorrect ? 'Correct' : (isSkipped ? 'Skipped' : 'Incorrect')}
-                          </Badge>
-                        </div>
-                        <CardTitle className="text-lg font-bold">{q.questionText}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-6 pt-0 space-y-3">
-                        {q.options.map((opt: string, oIdx: number) => {
-                          const isStudentOption = studentChoice === oIdx;
-                          const isCorrectOption = correctChoice === oIdx;
+                    return (
+                      <Card key={q.id} className={cn(
+                        "border-none shadow-sm rounded-3xl overflow-hidden",
+                        isCorrect ? "bg-emerald-500/5 ring-1 ring-emerald-500/20" : "bg-destructive/5 ring-1 ring-destructive/20"
+                      )}>
+                        <CardHeader className="p-6">
+                          <div className="flex items-center justify-between mb-2">
+                            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest">Question {idx + 1}</Badge>
+                            <Badge variant={isCorrect ? 'default' : 'destructive'} className={cn(
+                              "rounded-lg px-3 py-1 text-[10px] font-black uppercase tracking-widest gap-1",
+                              isCorrect ? "bg-emerald-500" : ""
+                            )}>
+                              {isCorrect ? <Check className="w-3 h-3" /> : (isSkipped ? <AlertTriangle className="w-3 h-3" /> : <X className="w-3 h-3" />)}
+                              {isCorrect ? 'Correct' : (isSkipped ? 'Skipped' : 'Incorrect')}
+                            </Badge>
+                          </div>
+                          <CardTitle className="text-lg font-bold">{q.questionText}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-6 pt-0 space-y-3">
+                          {q.options.map((opt: string, oIdx: number) => {
+                            const isStudentOption = studentChoice === oIdx;
+                            const isCorrectOption = correctChoice === oIdx;
 
-                          return (
-                            <div 
-                              key={oIdx} 
-                              className={cn(
-                                "flex items-center gap-4 p-4 rounded-2xl border transition-all",
-                                isCorrectOption ? "bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20 shadow-sm" : "bg-background border-border/50",
-                                isStudentOption && !isCorrectOption ? "bg-destructive/10 border-destructive/30 ring-1 ring-destructive/20" : ""
-                              )}
-                            >
-                              <div className={cn(
-                                "w-8 h-8 rounded-full flex items-center justify-center font-black text-xs",
-                                isCorrectOption ? "bg-emerald-500 text-white" : 
-                                isStudentOption ? "bg-destructive text-white" : "bg-muted text-muted-foreground"
-                              )}>
-                                {String.fromCharCode(65 + oIdx)}
+                            return (
+                              <div 
+                                key={oIdx} 
+                                className={cn(
+                                  "flex items-center gap-4 p-4 rounded-2xl border transition-all",
+                                  isCorrectOption ? "bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20 shadow-sm" : "bg-background border-border/50",
+                                  isStudentOption && !isCorrectOption ? "bg-destructive/10 border-destructive/30 ring-1 ring-destructive/20" : ""
+                                )}
+                              >
+                                <div className={cn(
+                                  "w-8 h-8 rounded-full flex items-center justify-center font-black text-xs",
+                                  isCorrectOption ? "bg-emerald-500 text-white" : 
+                                  isStudentOption ? "bg-destructive text-white" : "bg-muted text-muted-foreground"
+                                )}>
+                                  {String.fromCharCode(65 + oIdx)}
+                                </div>
+                                <span className={cn(
+                                  "flex-1 text-sm font-medium",
+                                  isCorrectOption ? "text-emerald-700 font-bold" : 
+                                  isStudentOption ? "text-destructive font-bold" : "text-foreground/70"
+                                )}>
+                                  {opt}
+                                </span>
+                                {isCorrectOption && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+                                {isStudentOption && !isCorrectOption && <XCircle className="w-5 h-5 text-destructive" />}
                               </div>
-                              <span className={cn(
-                                "flex-1 text-sm font-medium",
-                                isCorrectOption ? "text-emerald-700 font-bold" : 
-                                isStudentOption ? "text-destructive font-bold" : "text-foreground/70"
-                              )}>
-                                {opt}
-                              </span>
-                              {isCorrectOption && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-                              {isStudentOption && !isCorrectOption && <XCircle className="w-5 h-5 text-destructive" />}
-                            </div>
-                          );
-                        })}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-                {reviewQuestions.length === 0 && (
-                  <div className="py-20 text-center text-muted-foreground italic">
-                    No questions found for this assessment.
-                  </div>
-                )}
-              </div>
-            )}
+                            );
+                          })}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                  {reviewQuestions.length === 0 && (
+                    <div className="py-20 text-center text-muted-foreground italic">
+                      No questions found for this assessment.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </ScrollArea>
           
-          <div className="p-8 border-t bg-muted/20 flex justify-end">
+          <div className="p-8 border-t bg-muted/20 flex justify-end shrink-0">
             <Button className="px-8 rounded-2xl" onClick={() => setReviewResult(null)}>Close Review</Button>
           </div>
         </DialogContent>
