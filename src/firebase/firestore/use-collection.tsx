@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,15 +12,15 @@ import {
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-/** Utility type to add an 'id' field to a given type T. */
-export type WithId<T> = T & { id: string };
+/** Utility type to add an 'id' and '__path' field to a given type T. */
+export type WithId<T> = T & { id: string; __path: string };
 
 /**
  * Interface for the return value of the useCollection hook.
  * @template T Type of the document data.
  */
 export interface UseCollectionResult<T> {
-  data: WithId<T>[] | null; // Document data with ID, or null.
+  data: WithId<T>[] | null; // Document data with ID and path, or null.
   isLoading: boolean;       // True if loading.
   error: FirestoreError | Error | null; // Error object, or null.
 }
@@ -69,7 +68,11 @@ export function useCollection<T = any>(
       (snapshot: QuerySnapshot<DocumentData>) => {
         const results: ResultItemType[] = [];
         for (const doc of snapshot.docs) {
-          results.push({ ...(doc.data() as T), id: doc.id });
+          results.push({ 
+            ...(doc.data() as T), 
+            id: doc.id,
+            __path: doc.ref.path 
+          });
         }
         setData(results);
         setError(null);

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
@@ -242,7 +241,8 @@ export default function AdminDashboard() {
 
       const score = total > 0 ? Math.round((correct / total) * 100) : 0;
 
-      const resultRef = doc(db, "users", res.studentId, "results", res.id);
+      // Use __path for absolute document targeting if available
+      const resultRef = res.__path ? doc(db, res.__path) : doc(db, "users", res.studentId, "results", res.id);
       await updateDoc(resultRef, {
         score,
         correctCount: correct,
@@ -289,7 +289,7 @@ export default function AdminDashboard() {
             });
           }
           const score = total > 0 ? Math.round((correct / total) * 100) : 0;
-          const resultRef = doc(db, "users", res.studentId, "results", res.id);
+          const resultRef = res.__path ? doc(db, res.__path) : doc(db, "users", res.studentId, "results", res.id);
           await updateDoc(resultRef, {
             score,
             correctCount: correct,
@@ -464,9 +464,9 @@ export default function AdminDashboard() {
     const batch = writeBatch(db);
     let count = 0;
     logsToDelete.forEach(log => {
-      // Safety check to ensure studentId and id are present
-      if (log.studentId && log.id) {
-        const logRef = doc(db, "users", log.studentId, "results", log.id);
+      // Prioritize __path for absolute targeting, fallback to construction
+      const logRef = log.__path ? doc(db, log.__path) : (log.studentId && log.id ? doc(db, "users", log.studentId, "results", log.id) : null);
+      if (logRef) {
         batch.delete(logRef);
         count++;
       }
