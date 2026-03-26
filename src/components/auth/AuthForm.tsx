@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { ShieldCheck, Lock, Mail, User as UserIcon } from "lucide-react"
+import { ShieldCheck, Lock, Mail, User as UserIcon, Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAuth, useFirestore } from "@/firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth"
@@ -22,6 +22,7 @@ export function AuthForm() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [isSignUp, setIsSignUp] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   
   const router = useRouter()
   const auth = useAuth()
@@ -34,6 +35,11 @@ export function AuthForm() {
       setSelectedRole('student')
     }
   }, [isSignUp])
+
+  // Reset password visibility when switching roles
+  useEffect(() => {
+    setShowPassword(false)
+  }, [selectedRole])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -213,12 +219,22 @@ export function AuthForm() {
               <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
               <Input 
                 id="password" 
-                type="password" 
-                className="pl-10 h-12 rounded-xl" 
+                type={showPassword && selectedRole === 'student' ? "text" : "password"} 
+                className={cn("pl-10 h-12 rounded-xl", selectedRole === 'student' && "pr-10")} 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required 
               />
+              {selectedRole === 'student' && (
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3.5 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              )}
             </div>
           </div>
           <Button type="submit" className="w-full btn-premium py-7 text-lg rounded-2xl" disabled={loading}>
