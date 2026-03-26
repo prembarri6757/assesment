@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
@@ -79,13 +80,13 @@ import {
 } from "@/components/ui/select"
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogAction,
+  AlertDialogCancel,
 } from "@/components/ui/alert-dialog"
 
 export default function AdminDashboard() {
@@ -461,14 +462,21 @@ export default function AdminDashboard() {
     if (!logsToDelete || logsToDelete.length === 0) return;
     
     const batch = writeBatch(db);
+    let count = 0;
     logsToDelete.forEach(log => {
-      const logRef = doc(db, "users", log.studentId, "results", log.id);
-      batch.delete(logRef);
+      // Safety check to ensure studentId and id are present
+      if (log.studentId && log.id) {
+        const logRef = doc(db, "users", log.studentId, "results", log.id);
+        batch.delete(logRef);
+        count++;
+      }
     });
 
     try {
-      await batch.commit();
-      toast({ title: "Audit Logs Purged", description: `Successfully removed ${logsToDelete.length} records.` });
+      if (count > 0) {
+        await batch.commit();
+        toast({ title: "Audit Logs Purged", description: `Successfully removed ${count} records.` });
+      }
       setSelectedLogs([]);
     } catch (e: any) {
       toast({ title: "Purge Error", description: e.message, variant: "destructive" });
@@ -879,7 +887,7 @@ Exam ID: ${res.examId}
                                   </Badge>
                                 </div>
                               </div>
-                              <Button variant="ghost" size="sm" onClick={() => setActiveTab('exams')}><ChevronRight className="w-4 h-4" /></Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleEditExam(exam.id)}><ChevronRight className="w-4 h-4" /></Button>
                             </div>
                           ))}
                           {(!exams || exams.length === 0) && <p className="text-center text-muted-foreground p-8">No assessments found.</p>}
@@ -942,7 +950,7 @@ Exam ID: ${res.examId}
                </div>
 
                {isLoadingExam ? (
-                 <div className="flex flex-col items-center justify-center p-20 gap-4">
+                 <div className="flex flex-col items-center justify-center p-20 gap-4" suppressHydrationWarning>
                    <Loader2 className="w-10 h-10 animate-spin text-primary" />
                    <p className="text-muted-foreground font-bold">Loading secure assessment data...</p>
                  </div>
@@ -1125,7 +1133,7 @@ Exam ID: ${res.examId}
                         placeholder="Search by name or email..." 
                         className="pl-10" 
                         value={userSearch} 
-                        onChange={(e) => userSearch && setUserSearch(e.target.value)} 
+                        onChange={(e) => setUserSearch(e.target.value)} 
                       />
                     </div>
                     <div className="flex items-center gap-2 w-full md:w-auto">
@@ -1235,7 +1243,7 @@ Exam ID: ${res.examId}
                       placeholder="Search by student or exam..." 
                       className="pl-10" 
                       value={auditSearch} 
-                      onChange={(e) => auditSearch && setAuditSearch(e.target.value)} 
+                      onChange={(e) => setAuditSearch(e.target.value)} 
                     />
                   </div>
                   <div className="flex items-center gap-2 w-full md:w-auto">
