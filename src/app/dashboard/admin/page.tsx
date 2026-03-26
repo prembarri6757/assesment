@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
@@ -39,11 +38,14 @@ import {
   CheckCircle2,
   XCircle,
   Download,
-  Upload
+  Upload,
+  FileUp,
+  ScanText
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs, updateDoc, writeBatch } from "firebase/firestore"
 import { generateQuestionIdeas, type GenerateQuestionIdeasOutput } from "@/ai/flows/admin-question-idea-generator"
+import { parseExamDocument, type ParseDocumentOutput } from "@/ai/flows/admin-document-parser"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -92,12 +94,14 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser()
   const { toast } = useToast()
   const router = useRouter()
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const csvInputRef = useRef<HTMLInputElement>(null)
+  const pdfInputRef = useRef<HTMLInputElement>(null)
   
   const [mounted, setMounted] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isParsingDoc, setIsParsingDoc] = useState(false)
   const [aiIdeas, setAiIdeas] = useState<GenerateQuestionIdeasOutput | null>(null)
   const [topic, setTopic] = useState("")
   const [examToDelete, setExamToDelete] = useState<string | null>(null)
@@ -344,7 +348,7 @@ export default function AdminDashboard() {
           setExamQuestions(prev => [...prev, ...parsedQuestions])
           toast({ title: "Import Successful", description: `Added ${parsedQuestions.length} questions from CSV.` })
         } else {
-          toast({ title: "Import Failed", description: "No valid questions found in CSV. Check your headers (questionText, option1, option2, option3, option4, correctIndex).", variant: "destructive" })
+          toast({ title: "Import Failed", description: "No valid questions found in CSV. Check your headers.", variant: "destructive" })
         }
       },
       error: (err) => {
@@ -352,8 +356,35 @@ export default function AdminDashboard() {
       }
     })
     
-    // Clear input
-    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (csvInputRef.current) csvInputRef.current.value = ""
+  }
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsParsingDoc(true)
+    try {
+      const reader = new FileReader()
+      reader.onload = async (event) => {
+        const dataUri = event.target?.result as string
+        const parsed = await parseExamDocument({ documentDataUri: dataUri })
+        
+        const formatted = parsed.questions.map(q => ({
+          ...q,
+          id: "q-" + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+        }))
+
+        setExamQuestions(prev => [...prev, ...formatted])
+        toast({ title: "Document Scanned", description: `AI extracted ${formatted.length} questions from your document.` })
+      }
+      reader.readAsDataURL(file)
+    } catch (error: any) {
+      toast({ title: "Scanning Failed", description: error.message, variant: "destructive" })
+    } finally {
+      setIsParsingDoc(false)
+      if (pdfInputRef.current) pdfInputRef.current.value = ""
+    }
   }
 
   const addQuestion = (q?: any) => {
@@ -897,7 +928,7 @@ Exam ID: ${res.examId}
             <div className="max-w-4xl mx-auto space-y-8">
                <div className="space-y-2">
                  <h2 className="text-3xl font-bold">{editingExamId ? "Update Assessment" : "Exam Builder"}</h2>
-                 <p className="text-muted-foreground">Author secure multiple-choice assessments with AI assistance or bulk CSV upload.</p>
+                 <p className="text-muted-foreground">Author secure multiple-choice assessments with AI assistance or bulk document scanning.</p>
                </div>
 
                {isLoadingExam ? (
@@ -929,18 +960,29 @@ Exam ID: ${res.examId}
                    </Card>
 
                    <div className="space-y-4">
-                     <div className="flex items-center justify-between">
-                       <h3 className="text-xl font-bold">Questions</h3>
-                       <div className="flex gap-2">
+                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                       <h3 className="text-xl font-bold">Questions ({examQuestions.length})</h3>
+                       <div className="flex flex-wrap gap-2">
                           <Input 
                             type="file" 
                             accept=".csv" 
                             className="hidden" 
-                            ref={fileInputRef} 
+                            ref={csvInputRef} 
                             onChange={handleCsvUpload} 
                           />
-                          <Button variant="outline" className="gap-2" onClick={() => fileInputRef.current?.click()}>
-                            <Upload className="w-4 h-4" /> Import CSV
+                          <Input 
+                            type="file" 
+                            accept=".pdf,image/*" 
+                            className="hidden" 
+                            ref={pdfInputRef} 
+                            onChange={handleDocUpload} 
+                          />
+                          <Button variant="outline" size="sm" className="gap-2" onClick={() => csvInputRef.current?.click()}>
+                            <Upload className="w-4 h-4" /> CSV Import
+                          </Button>
+                          <Button variant="outline" size="sm" className="gap-2" onClick={() => pdfInputRef.current?.click()} disabled={isParsingDoc}>
+                            {isParsingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanText className="w-4 h-4" />}
+                            Scan Document (AI)
                           </Button>
                        </div>
                      </div>
@@ -1017,10 +1059,10 @@ Exam ID: ${res.examId}
                    </div>
 
                    <div className="fixed bottom-8 right-8 z-50 flex gap-4">
-                     <Button variant="outline" onClick={() => setActiveTab('exams')} className="px-6 py-6 rounded-2xl">
+                     <Button variant="outline" onClick={() => setActiveTab('exams')} className="px-6 py-6 rounded-2xl bg-background/80 backdrop-blur-sm">
                        Discard Changes
                      </Button>
-                     <Button variant="secondary" className="px-8 py-6 text-lg rounded-2xl" onClick={(e) => handleSaveExam(e, "draft")}>
+                     <Button variant="secondary" className="px-8 py-6 text-lg rounded-2xl shadow-xl" onClick={(e) => handleSaveExam(e, "draft")}>
                        <Save className="w-4 h-4 mr-2" /> Save Draft
                      </Button>
                      <Button className="px-10 py-6 text-lg shadow-2xl btn-premium rounded-2xl" onClick={(e) => handleSaveExam(e, "published")}>
@@ -1073,7 +1115,7 @@ Exam ID: ${res.examId}
                         placeholder="Search by name or email..." 
                         className="pl-10" 
                         value={userSearch} 
-                        onChange={(e) => userSearch(e.target.value)} 
+                        onChange={(e) => setUserSearch(e.target.value)} 
                       />
                     </div>
                     <div className="flex items-center gap-2 w-full md:w-auto">
