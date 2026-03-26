@@ -40,7 +40,8 @@ import {
   Download,
   Upload,
   FileUp,
-  ScanText
+  ScanText,
+  Paperclip
 } from "lucide-react"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from "@/firebase"
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, collectionGroup, getDocs, updateDoc, writeBatch } from "firebase/firestore"
@@ -95,13 +96,13 @@ export default function AdminDashboard() {
   const { toast } = useToast()
   const router = useRouter()
   const csvInputRef = useRef<HTMLInputElement>(null)
-  const pdfInputRef = useRef<HTMLInputElement>(null)
+  const attachDocInputRef = useRef<HTMLInputElement>(null)
   
   const [mounted, setMounted] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [isParsingDoc, setIsParsingDoc] = useState(false)
+  const [isAttachingDoc, setIsAttachingDoc] = useState(false)
   const [aiIdeas, setAiIdeas] = useState<GenerateQuestionIdeasOutput | null>(null)
   const [topic, setTopic] = useState("")
   const [examToDelete, setExamToDelete] = useState<string | null>(null)
@@ -359,11 +360,11 @@ export default function AdminDashboard() {
     if (csvInputRef.current) csvInputRef.current.value = ""
   }
 
-  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAttachDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    setIsParsingDoc(true)
+    setIsAttachingDoc(true)
     try {
       const reader = new FileReader()
       reader.onload = async (event) => {
@@ -376,14 +377,14 @@ export default function AdminDashboard() {
         }))
 
         setExamQuestions(prev => [...prev, ...formatted])
-        toast({ title: "Document Scanned", description: `AI extracted ${formatted.length} questions from your document.` })
+        toast({ title: "Document Processed", description: `AI extracted ${formatted.length} questions from your attachment.` })
       }
       reader.readAsDataURL(file)
     } catch (error: any) {
-      toast({ title: "Scanning Failed", description: error.message, variant: "destructive" })
+      toast({ title: "Attachment Failed", description: error.message, variant: "destructive" })
     } finally {
-      setIsParsingDoc(false)
-      if (pdfInputRef.current) pdfInputRef.current.value = ""
+      setIsAttachingDoc(false)
+      if (attachDocInputRef.current) attachDocInputRef.current.value = ""
     }
   }
 
@@ -813,7 +814,7 @@ Exam ID: ${res.examId}
                 {[
                   { label: "Active Exams", value: exams?.length, icon: FileText, color: "text-blue-500", loading: examsLoading },
                   { label: "User Base", value: allUsers?.length, icon: Users, color: "text-indigo-500", loading: usersLoading },
-                  { label: "Total Attempts", value: results?.length, icon: ShieldCheck, color: "text-emerald-500", loading: resultsLoading },
+                  { label: "Total Attempts", value: `${results?.length || 0}`, icon: ShieldCheck, color: "text-emerald-500", loading: resultsLoading },
                   { label: "Integrity Alerts", value: results?.filter(r => r.integrityStatus === 'Flagged').length, icon: ShieldAlert, color: "text-red-500", loading: resultsLoading },
                 ].map((stat, i) => (
                   <Card key={i} className="border-none shadow-sm">
@@ -937,7 +938,7 @@ Exam ID: ${res.examId}
             <div className="max-w-4xl mx-auto space-y-8">
                <div className="space-y-2">
                  <h2 className="text-3xl font-bold">{editingExamId ? "Update Assessment" : "Exam Builder"}</h2>
-                 <p className="text-muted-foreground">Author secure multiple-choice assessments with AI assistance or bulk document scanning.</p>
+                 <p className="text-muted-foreground">Author secure multiple-choice assessments with AI assistance or bulk document attachments.</p>
                </div>
 
                {isLoadingExam ? (
@@ -981,17 +982,17 @@ Exam ID: ${res.examId}
                           />
                           <Input 
                             type="file" 
-                            accept=".pdf,image/*" 
+                            accept=".pdf,.docx,.doc,image/*" 
                             className="hidden" 
-                            ref={pdfInputRef} 
-                            onChange={handleDocUpload} 
+                            ref={attachDocInputRef} 
+                            onChange={handleAttachDocument} 
                           />
                           <Button variant="outline" size="sm" className="gap-2" onClick={() => csvInputRef.current?.click()}>
                             <Upload className="w-4 h-4" /> CSV Import
                           </Button>
-                          <Button variant="outline" size="sm" className="gap-2" onClick={() => pdfInputRef.current?.click()} disabled={isParsingDoc}>
-                            {isParsingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanText className="w-4 h-4" />}
-                            Scan Document (AI)
+                          <Button variant="outline" size="sm" className="gap-2" onClick={() => attachDocInputRef.current?.click()} disabled={isAttachingDoc}>
+                            {isAttachingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                            Attach Document (AI)
                           </Button>
                        </div>
                      </div>
@@ -1124,7 +1125,7 @@ Exam ID: ${res.examId}
                         placeholder="Search by name or email..." 
                         className="pl-10" 
                         value={userSearch} 
-                        onChange={(e) => setUserSearch(e.target.value)} 
+                        onChange={(e) => userSearch && setUserSearch(e.target.value)} 
                       />
                     </div>
                     <div className="flex items-center gap-2 w-full md:w-auto">
@@ -1234,7 +1235,7 @@ Exam ID: ${res.examId}
                       placeholder="Search by student or exam..." 
                       className="pl-10" 
                       value={auditSearch} 
-                      onChange={(e) => setAuditSearch(e.target.value)} 
+                      onChange={(e) => auditSearch && setAuditSearch(e.target.value)} 
                     />
                   </div>
                   <div className="flex items-center gap-2 w-full md:w-auto">
