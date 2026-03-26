@@ -711,7 +711,16 @@ Exam ID: ${res.examId}
     return isNaN(d.getTime()) ? null : d;
   }
 
-  if (isUserLoading || adminRoleLoading || !mounted) {
+  // Hydration-safe loading logic
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (isUserLoading || adminRoleLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background" suppressHydrationWarning>
         <Loader2 className="w-12 h-12 text-primary animate-spin" />

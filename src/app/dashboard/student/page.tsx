@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState } from "react"
@@ -164,7 +163,17 @@ export default function StudentDashboard() {
     flags: results?.filter(r => r.integrityStatus === 'Flagged').length || 0
   }
 
-  if (isUserLoading || profileLoading || !mounted) {
+  // Hydration-safe loading logic
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <p className="text-muted-foreground font-medium">Initialising Interface...</p>
+      </div>
+    )
+  }
+
+  if (isUserLoading || profileLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4" suppressHydrationWarning>
         <Loader2 className="w-10 h-10 text-primary animate-spin" />
