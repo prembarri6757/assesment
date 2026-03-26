@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useScrollReveal } from "@/hooks/use-scroll-reveal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
@@ -29,7 +29,8 @@ import {
   X,
   Sparkles,
   Settings,
-  Save
+  Save,
+  Search
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from "@/firebase"
@@ -70,6 +71,9 @@ export default function StudentDashboard() {
   const [newUsername, setNewUsername] = useState("")
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false)
 
+  // Search State
+  const [searchQuery, setSearchQuery] = useState("")
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -97,6 +101,17 @@ export default function StudentDashboard() {
     return collection(db, "users", user.uid, "results")
   }, [db, user])
   const { data: results, isLoading: resultsLoading } = useCollection(resultsQuery)
+
+  // Filtered Exams
+  const filteredExams = useMemo(() => {
+    if (!exams) return []
+    if (!searchQuery.trim()) return exams
+    const lowerQuery = searchQuery.toLowerCase()
+    return exams.filter(exam => 
+      exam.title.toLowerCase().includes(lowerQuery) || 
+      exam.description?.toLowerCase().includes(lowerQuery)
+    )
+  }, [exams, searchQuery])
 
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -280,11 +295,21 @@ export default function StudentDashboard() {
           </TabsList>
 
           <TabsContent value="exams" className="space-y-8 outline-none">
+            <div className="relative max-w-2xl">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <Input 
+                placeholder="Search assessments by title or topic..." 
+                className="pl-12 h-14 rounded-2xl bg-card border-none shadow-lg text-lg focus-visible:ring-primary"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {examsLoading ? (
                 [1,2,3].map(i => <div key={i} className="h-64 bg-muted animate-pulse rounded-3xl" />)
               ) : (
-                exams?.map((exam) => (
+                filteredExams?.map((exam) => (
                   <Card key={exam.id} className="hover:border-primary transition-all shadow-xl border-none bg-card group overflow-hidden rounded-[2.5rem]">
                     <CardHeader className="p-8">
                       <div className="flex items-center justify-between mb-4">
@@ -303,11 +328,22 @@ export default function StudentDashboard() {
                   </Card>
                 ))
               )}
-              {(!exams || exams.length === 0) && !examsLoading && (
+              {(!filteredExams || filteredExams.length === 0) && !examsLoading && (
                 <Card className="col-span-full border-dashed border-2 p-20 flex flex-col items-center justify-center text-center bg-muted/20 rounded-[2.5rem]">
                   <BookOpen className="w-16 h-16 text-muted-foreground mb-4 opacity-20" />
-                  <h3 className="text-2xl font-bold">No Active Assessments</h3>
-                  <p className="text-muted-foreground max-w-sm mt-3 text-lg">Your academic roster is currently up to date. New assessments will appear here.</p>
+                  <h3 className="text-2xl font-bold">
+                    {searchQuery ? "No Matching Assessments" : "No Active Assessments"}
+                  </h3>
+                  <p className="text-muted-foreground max-w-sm mt-3 text-lg">
+                    {searchQuery 
+                      ? `We couldn't find any assessments matching "${searchQuery}".` 
+                      : "Your academic roster is currently up to date. New assessments will appear here."}
+                  </p>
+                  {searchQuery && (
+                    <Button variant="link" onClick={() => setSearchQuery("")} className="mt-4 text-primary">
+                      Clear Search
+                    </Button>
+                  )}
                 </Card>
               )}
             </div>
