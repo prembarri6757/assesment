@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, ShieldAlert, CheckCircle2, Lock, Loader2 } from "lucide-react"
+import { AlertCircle, ShieldAlert, CheckCircle2, Lock, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { useFirestore, useUser, useDoc, useCollection, useMemoFirebase } from "@/firebase"
@@ -227,6 +227,12 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     }
   }
 
+  const handlePrevious = () => {
+    if (currentQuestionIdx > 0) {
+      setCurrentQuestionIdx(prev => prev - 1)
+    }
+  }
+
   if (examLoading || questionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -363,10 +369,25 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             </div>
           </CardContent>
           <CardFooter className="bg-muted/30 p-8 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground italic">Responses synced securely.</p>
-            <div className="flex gap-4">
-              <Button type="button" onClick={handleNext} disabled={answers[currentQuestion.id] === undefined} className="btn-premium px-8">
+            <p className="text-xs text-muted-foreground italic hidden sm:block">Responses synced securely.</p>
+            <div className="flex gap-4 w-full sm:w-auto">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={handlePrevious} 
+                disabled={currentQuestionIdx === 0}
+                className="flex-1 sm:flex-none gap-2"
+              >
+                <ChevronLeft className="w-4 h-4" /> Previous
+              </Button>
+              <Button 
+                type="button" 
+                onClick={handleNext} 
+                disabled={answers[currentQuestion.id] === undefined} 
+                className="flex-1 sm:flex-none btn-premium px-8 gap-2"
+              >
                 {shuffledQuestions && currentQuestionIdx === shuffledQuestions.length - 1 ? 'Finalize Session' : 'Save & Next'}
+                <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
           </CardFooter>
