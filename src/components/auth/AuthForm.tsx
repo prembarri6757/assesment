@@ -21,6 +21,7 @@ export function AuthForm() {
   const [email, setEmail] = useState("")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [isSignUp, setIsSignUp] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   
@@ -49,6 +50,12 @@ export function AuthForm() {
       if (isSignUp) {
         if (!username) {
           toast({ title: "Validation Error", description: "Please enter a username.", variant: "destructive" })
+          setLoading(false)
+          return
+        }
+
+        if (password !== confirmPassword) {
+          toast({ title: "Validation Error", description: "Passwords do not match. Please verify your new password.", variant: "destructive" })
           setLoading(false)
           return
         }
@@ -202,7 +209,7 @@ export function AuthForm() {
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{isSignUp ? "Create Password" : "Password"}</Label>
               {!isSignUp && (
                 <Button 
                   variant="link" 
@@ -220,12 +227,13 @@ export function AuthForm() {
               <Input 
                 id="password" 
                 type={showPassword && selectedRole === 'student' ? "text" : "password"} 
-                className={cn("pl-10 h-12 rounded-xl", selectedRole === 'student' && "pr-10")} 
+                className={cn("pl-10 h-12 rounded-xl", (selectedRole === 'student' || isSignUp) && "pr-10")} 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder={isSignUp ? "Min. 6 characters" : ""}
                 required 
               />
-              {selectedRole === 'student' && (
+              {(selectedRole === 'student' || isSignUp) && (
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -237,13 +245,32 @@ export function AuthForm() {
               )}
             </div>
           </div>
+
+          {isSignUp && (
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                <Input 
+                  id="confirmPassword" 
+                  type={showPassword ? "text" : "password"} 
+                  placeholder="Repeat your password"
+                  className="pl-10 h-12 rounded-xl" 
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required 
+                />
+              </div>
+            </div>
+          )}
+
           <Button type="submit" className="w-full btn-premium py-7 text-lg rounded-2xl" disabled={loading}>
             {loading ? "Verifying..." : isSignUp ? "Create Student Account" : "Access Secure Portal"}
           </Button>
         </form>
       </CardContent>
       <CardFooter className="flex flex-col space-y-4">
-        <Button variant="link" size="sm" onClick={() => setIsSignUp(!isSignUp)} className="text-muted-foreground hover:text-primary">
+        <Button variant="link" size="sm" onClick={() => { setIsSignUp(!isSignUp); setConfirmPassword(""); }} className="text-muted-foreground hover:text-primary">
           {isSignUp ? "Already have an identity? Sign In" : "Need a student account? Sign Up"}
         </Button>
         <div className="flex items-center gap-2 opacity-50 grayscale">
