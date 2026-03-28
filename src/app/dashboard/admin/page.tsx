@@ -134,6 +134,7 @@ export default function AdminDashboard() {
   const [auditSearch, setAuditSearch] = useState("")
   const [auditExamFilter, setAuditExamFilter] = useState<string>("all")
   const [auditStatusFilter, setAuditStatusFilter] = useState<string>("all")
+  const [outcomeFilter, setOutcomeFilter] = useState<string>("all")
 
   useEffect(() => {
     setMounted(true)
@@ -241,7 +242,6 @@ export default function AdminDashboard() {
 
       const score = total > 0 ? Math.round((correct / total) * 100) : 0;
 
-      // Use __path for absolute document targeting if available
       const resultRef = res.__path ? doc(db, res.__path) : doc(db, "users", res.studentId, "results", res.id);
       await updateDoc(resultRef, {
         score,
@@ -464,7 +464,6 @@ export default function AdminDashboard() {
     const batch = writeBatch(db);
     let count = 0;
     logsToDelete.forEach(log => {
-      // Prioritize __path for absolute targeting, fallback to construction
       const logRef = log.__path ? doc(db, log.__path) : (log.studentId && log.id ? doc(db, "users", log.studentId, "results", log.id) : null);
       if (logRef) {
         batch.delete(logRef);
@@ -624,13 +623,27 @@ export default function AdminDashboard() {
 
   const filteredResults = useMemo(() => {
     return results?.filter(res => {
+      const examData = exams?.find(e => e.id === res.examId);
+      const isGraded = res.score !== undefined;
+      const isPassed = isGraded && res.score >= (examData?.passingScore || 0);
+      
       const matchesSearch = (res.studentEmail?.toLowerCase() || "").includes(auditSearch.toLowerCase()) || 
                             (res.examTitle?.toLowerCase() || "").includes(auditSearch.toLowerCase())
       const matchesExam = auditExamFilter === "all" || res.examTitle === auditExamFilter
       const matchesStatus = auditStatusFilter === "all" || res.integrityStatus === auditStatusFilter
-      return matchesSearch && matchesExam && matchesStatus
+      
+      let matchesOutcome = true;
+      if (outcomeFilter === "pass") {
+        matchesOutcome = isGraded && isPassed;
+      } else if (outcomeFilter === "fail") {
+        matchesOutcome = isGraded && !isPassed;
+      } else if (outcomeFilter === "unmarked") {
+        matchesOutcome = !isGraded;
+      }
+
+      return matchesSearch && matchesExam && matchesStatus && matchesOutcome;
     })
-  }, [results, auditSearch, auditExamFilter, auditStatusFilter])
+  }, [results, auditSearch, auditExamFilter, auditStatusFilter, outcomeFilter, exams])
 
   const uniqueExamTitles = useMemo(() => {
     const titles = new Set<string>()
@@ -720,7 +733,6 @@ Exam ID: ${res.examId}
     return isNaN(d.getTime()) ? null : d;
   }
 
-  // Hydration-safe loading logic
   if (!mounted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -1256,6 +1268,17 @@ Exam ID: ${res.examId}
                         {uniqueExamTitles.map(title => (
                           <SelectItem key={title} value={title}>{title}</SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
+                      <SelectTrigger className="w-full md:w-[150px]">
+                        <SelectValue placeholder="All Outcomes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Outcomes</SelectItem>
+                        <SelectItem value="pass">Pass Only</SelectItem>
+                        <SelectItem value="fail">Fail Only</SelectItem>
+                        <SelectItem value="unmarked">Unmarked</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select value={auditStatusFilter} onValueChange={setAuditStatusFilter}>
